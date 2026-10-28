@@ -166,8 +166,9 @@ export function mcpRequest(
   accessToken: string | null,
   method: string,
   params: Record<string, unknown> = {},
+  url: string = MCP_URL,
 ): Promise<Response> {
-  return worker.fetch(MCP_URL, {
+  return worker.fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -202,4 +203,55 @@ export async function readRpc(res: Response): Promise<RpcResponse> {
         ?.slice(5)
         .trim();
   return JSON.parse(data ?? "null");
+}
+
+export const MODERN_VERSION = "2026-07-28";
+
+/**
+ * MCP 2026-07-28 レーンのリクエスト(initialize なし)。ルーティング用ヘッダー(MCP-Protocol-Version / Mcp-Method /
+ * Mcp-Name)と、params._meta のプロトコルバージョン・クライアント情報・機能を付ける。
+ * `headers` の値が null のヘッダーは外す(欠落のテスト用)。`meta` で _meta を上書きできる。
+ */
+export function modernRequest(
+  accessToken: string | null,
+  method: string,
+  params: Record<string, unknown> = {},
+  opts: {
+    url?: string;
+    headers?: Record<string, string | null>;
+    meta?: Record<string, unknown>;
+  } = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    "MCP-Protocol-Version": MODERN_VERSION,
+    "Mcp-Method": method,
+    ...(typeof params.name === "string" && method === "tools/call"
+      ? { "Mcp-Name": params.name }
+      : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+  for (const [k, v] of Object.entries(opts.headers ?? {})) {
+    if (v === null) delete headers[k];
+    else headers[k] = v;
+  }
+  return worker.fetch(opts.url ?? MCP_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": MODERN_VERSION,
+          "io.modelcontextprotocol/clientInfo": { name: "logbutler-e2e", version: "0.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {},
+          ...opts.meta,
+        },
+      },
+    }),
+  });
 }

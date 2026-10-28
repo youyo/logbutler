@@ -116,7 +116,7 @@ describe("my_tasks", () => {
     },
   );
 
-  it("日付は LOGBUTLER_TIMEZONE の暦日(UTC 10/28 16:30 は JST では 10/29 木曜、UTC では 10/28 水曜)", async () => {
+  it("日付は timezone の暦日(UTC 10/28 16:30 は JST では 10/29 木曜、UTC では 10/28 水曜)", async () => {
     const now = new Date("2026-10-28T16:30:00Z");
     const jst = await run({ mode: "next" }, { "GET /issues": [] }, { now, timezone: "Asia/Tokyo" });
     expect(jst.calls[1]).toContain("dueDateUntil=2026-10-28"); // 昨日 = JST の 10/28

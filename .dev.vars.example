@@ -11,7 +11,5 @@ BACKLOG_CLIENT_SECRET=
 # ACCESS_AUD=
 # PUBLIC_BASE_URL=http://localhost:8787
 
-# ツールの絞り込み(任意)
-# LOGBUTLER_TOOLSETS=all
-# LOGBUTLER_READ_ONLY=false
-# LOGBUTLER_TIMEZONE=Asia/Tokyo
+# ツールの絞り込み(toolsets / read_only)と「今日」の基準(timezone)は環境変数ではなく、
+# 接続 URL のクエリ(/mcp?toolsets=issue,wiki&read_only=true)とツール引数 timezone で決める。README を参照。

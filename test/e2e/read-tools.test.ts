@@ -1,7 +1,5 @@
-import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearJwksCache } from "../../src/auth/access-jwt";
-import worker from "../../src/index";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
   accessHeaders,
@@ -132,28 +130,18 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     expect(calls).toHaveLength(0);
   });
 
-  it("LOGBUTLER_TOOLSETS で toolset を絞ると、tools/list からそのツールが消える", async () => {
+  it("URL クエリ ?toolsets= で toolset を絞ると、tools/list からそのツールが消える", async () => {
     const { token } = await loggedIn({});
-    const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
-    const list = async (toolsets: string) => {
-      const res = await worker.fetch(
-        new Request(MCP_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json, text/event-stream",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
-        }),
-        { ...env, LOGBUTLER_TOOLSETS: toolsets },
-        ctx,
-      );
+    const list = async (toolsets?: string) => {
+      const url =
+        toolsets === undefined ? MCP_URL : `${MCP_URL}?${new URLSearchParams({ toolsets })}`;
+      const res = await mcpRequest(token, "tools/list", {}, url);
       expect(res.status).toBe(200);
       return (await readRpc(res)).result?.tools?.map((t) => t.name) ?? [];
     };
 
-    const all = await list("all");
+    const all = await list();
+    expect(await list("all")).toEqual(all);
     expect(all).toHaveLength(38 + 15 + 11); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions + M05A の分析 11
     expect(all).toContain("logbutler_issue_list");
 

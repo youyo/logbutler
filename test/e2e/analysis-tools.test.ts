@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearJwksCache } from "../../src/auth/access-jwt";
-import { ago, endless, issue, NOW, paged, USER_A } from "../helpers/analysis-fixtures";
+import {
+  activity,
+  ago,
+  endless,
+  endlessActivities,
+  endlessComments,
+  issue,
+  NOW,
+  paged,
+  USER_A,
+} from "../helpers/analysis-fixtures";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
   accessHeaders,
@@ -86,7 +96,7 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     expect(calls[0]?.headers.get("authorization")).toMatch(/^Bearer backlog-at-/);
   });
 
-  it("my_tasks: GetMyself → overdue → upcoming → watching。重複は overdue 優先、日付は LOGBUTLER_TIMEZONE(既定 Asia/Tokyo)の暦日", async () => {
+  it("my_tasks: GetMyself → overdue → upcoming → watching。重複は overdue 優先、日付は timezone 引数(既定 Asia/Tokyo)の暦日", async () => {
     const overdueOnly = issue({ key: "PROJ-1", dueDate: "2026-10-25T00:00:00Z" });
     const both = issue({ key: "PROJ-2", dueDate: "2026-10-27T00:00:00Z" });
     const upcomingOnly = issue({ key: "PROJ-3", dueDate: "2026-10-30T00:00:00Z" });
@@ -173,6 +183,61 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     });
     expect(json.analysis.completed.map((i: { issue_key: string }) => i.issue_key)).toEqual([
       "PROJ-1",
+    ]);
+  });
+
+  it("project_blockers(include_comments): 5 プロジェクトが上限まで続いても、コメント確認 50 件を含めて 105 回で止まる(maxApiCalls と最新コメントの取得が /mcp で効く)", async () => {
+    const handlers: Parameters<typeof mockOutboundFetch>[0] = {
+      [`GET ${API}/issues`]: (call) =>
+        jsonResponse(
+          endless((n) => issue({ key: `X-${n}`, assignee: USER_A, updated: ago(1) }))(call),
+        ),
+      [`GET ${API}/issues/*/comments`]: () => jsonResponse([]),
+    };
+    for (const k of ["A", "B", "C", "D", "E"]) {
+      handlers[`GET ${API}/projects/${k}`] = () => jsonResponse({ id: 10 });
+    }
+    const { token, calls } = await loggedIn(handlers);
+    const { isError, json } = await callAnalysis(token, "logbutler_project_blockers", {
+      project_keys: "A,B,C,D,E",
+      include_comments: true,
+    });
+    expect(isError).toBe(false);
+    const commentCalls = calls.filter((c) => pathOf(c.url).endsWith("/comments"));
+    expect(commentCalls).toHaveLength(50);
+    // 最新 1 件だけを見る
+    const q = new URL(commentCalls[0]?.url ?? "").searchParams;
+    expect([q.get("count"), q.get("order")]).toEqual(["1", "desc"]);
+    expect(calls).toHaveLength(5 * 11 + 50);
+    expect(json.analysis.truncated).toBe(true);
+    expect(json.warnings.map((w: { code: string }) => w.code)).toContain("comment_check_truncated");
+  });
+
+  it("issue_timeline: コメントとアクティビティを maxId のカーソルで辿り、1 + 10 + 10 = 21 回で止まる", async () => {
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/issues/P-1`]: () => jsonResponse(issue({ key: "P-1", id: 5000 })),
+      [`GET ${API}/issues/P-1/comments`]: (call) => jsonResponse(endlessComments()(call)),
+      [`GET ${API}/projects/P/activities`]: (call) =>
+        jsonResponse(
+          endlessActivities((id) => activity({ id, type: 2, content: { id: 5000, key_id: 1 } }))(
+            call,
+          ),
+        ),
+    });
+    const { isError, json } = await callAnalysis(token, "logbutler_issue_timeline", {
+      issue_key: "P-1",
+      max_activity_pages: 10,
+    });
+    expect(isError).toBe(false);
+    expect(calls).toHaveLength(21);
+    // 2 ページ目以降は直前のページの最小 id を maxId に渡す(カーソル)
+    const commentCalls = calls.filter((c) => pathOf(c.url) === "/issues/P-1/comments");
+    expect(new URL(commentCalls[0]?.url ?? "").searchParams.get("maxId")).toBeNull();
+    expect(new URL(commentCalls[1]?.url ?? "").searchParams.get("maxId")).not.toBeNull();
+    expect(json.analysis.truncated).toBe(true);
+    expect(json.warnings.map((w: { code: string }) => w.code)).toEqual([
+      "comments_truncated",
+      "activity_pagination_truncated",
     ]);
   });
 });

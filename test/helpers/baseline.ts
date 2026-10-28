@@ -145,6 +145,21 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
     reason:
       "file_paths（サーバー上のファイルパス）は Workers にファイルシステムがないためスキーマから削除し、base64 のみにした（M04 の決定済み事項）。説明文と file_content_base64 の説明から file_paths への言及も除いた。差分の範囲は test/unit/tools-list-snapshot.test.ts で固定している。",
   },
+  ...[
+    "logbutler_issue_list",
+    "logbutler_my_tasks",
+    "logbutler_digest_daily",
+    "logbutler_digest_weekly",
+    "logbutler_activity_stats",
+    "logbutler_issue_timeline",
+  ].map(
+    (tool): AllowedChange => ({
+      tool,
+      fields: ["inputSchema"],
+      reason:
+        "timezone 引数（任意・IANA 名・省略時 Asia/Tokyo）の追加。タイムゾーンの環境変数を廃止し、「今日」の基準をクライアントが呼び出しごとに決められるようにした（M05.5 の決定済み事項）。Workers は UTC で動くため logvalet のローカル時刻依存の代わりに必要。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.timezone の追加だけに固定している。",
+    }),
+  ),
 ];
 export const ALLOWED_MISSING: readonly string[] = [];
 export const ALLOWED_EXTRA: readonly string[] = [];

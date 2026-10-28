@@ -5,7 +5,8 @@
 import type { McpServer, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import { type BacklogClient, BacklogUnauthorizedError } from "../backlog/client";
-import { ArgumentError, ConfigError, LogbutlerError, toErrorEnvelope } from "../errors";
+import { ArgumentError, LogbutlerError, QueryError, toErrorEnvelope } from "../errors";
+import { assertTimezone } from "./args";
 import {
   explicitKeyFrom,
   type IdempotencyDeps,
@@ -16,7 +17,7 @@ import {
 /** logvalet の 4 区分(`internal/mcp/tool_categories.go`)。 */
 export type ToolCategory = "ReadOnly" | "WriteIdempotent" | "WriteNonIdempotent" | "Destructive";
 
-/** リソース単位のグループ。`LOGBUTLER_TOOLSETS` で有効にするものを選ぶ。 */
+/** リソース単位のグループ。/mcp の URL クエリ `?toolsets=` で有効にするものを選ぶ。 */
 export const TOOLSETS = [
   "issue",
   "project",
@@ -85,7 +86,7 @@ export interface ToolContext {
   client: BacklogClient;
   /** 現在時刻(テストで差し替える)。ツールは `Date.now()` を直接呼ばない。 */
   now: () => Date;
-  /** 「今日」「今週」の基準になる IANA タイムゾーン(`LOGBUTLER_TIMEZONE`。既定 Asia/Tokyo)。 */
+  /** 「今日」「今週」の基準になる IANA タイムゾーン。ツール引数 `timezone` があればそれ、なければ既定(Asia/Tokyo)。 */
   timezone: string;
   /** Backlog スペースのホスト(例 `example.backlog.com`)。分析系の出力の `space` / `base_url` の材料。 */
   spaceHost: string;
@@ -146,36 +147,37 @@ export interface ToolConfig {
   readOnly: boolean;
 }
 
-export interface ToolConfigEnv {
-  LOGBUTLER_TOOLSETS?: string;
-  LOGBUTLER_READ_ONLY?: string;
-}
-
 /**
- * 環境変数からツール設定を作る。未知の toolset 名や読めない真偽値は ConfigError にする
- * (typo で黙って全ツールが消えたり、読み取り専用のつもりで書き込めたりしないため)。
+ * /mcp の URL クエリからツール設定を作る(`?toolsets=issue,wiki&read_only=true`)。
+ * 公開するツールは tools/list の時点で決まるため、ツール引数ではなく接続 URL で決める(ADR 0008)。
+ * 未知の toolset 名や読めない真偽値は QueryError にする(typo で黙って全ツールが消えたり、
+ * 読み取り専用のつもりで書き込めたりしないため)。関係のないクエリは無視する。
  */
-export function parseToolConfig(env: ToolConfigEnv): ToolConfig {
-  const raw = (env.LOGBUTLER_TOOLSETS ?? "").trim().toLowerCase();
+export function parseToolConfig(params: URLSearchParams): ToolConfig {
+  const names = params
+    .getAll("toolsets")
+    .flatMap((v) => v.split(","))
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s !== "");
   let toolsets: ToolConfig["toolsets"] = "all";
-  if (raw !== "" && raw !== "all") {
-    const names = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s !== "");
+  if (names.length > 0 && !names.includes("all")) {
     const known = new Set<string>(TOOLSETS);
     const unknown = names.filter((n) => !known.has(n));
     if (unknown.length > 0) {
-      throw new ConfigError(
-        `LOGBUTLER_TOOLSETS に未知の toolset がある: ${unknown.join(", ")}(有効: all, ${TOOLSETS.join(", ")})`,
+      throw new QueryError(
+        `toolsets に未知の toolset がある: ${unknown.join(", ")}(有効: all, ${TOOLSETS.join(", ")})`,
       );
     }
     toolsets = new Set(names as Toolset[]);
   }
 
-  const ro = (env.LOGBUTLER_READ_ONLY ?? "").trim().toLowerCase();
+  const readOnlyValues = params.getAll("read_only");
+  if (readOnlyValues.length > 1) {
+    throw new QueryError("read_only は 1 回だけ指定できる(true か false)");
+  }
+  const ro = (readOnlyValues[0] ?? "").trim().toLowerCase();
   if (ro !== "" && ro !== "true" && ro !== "false") {
-    throw new ConfigError(`LOGBUTLER_READ_ONLY は true か false: ${env.LOGBUTLER_READ_ONLY}`);
+    throw new QueryError(`read_only は true か false: ${readOnlyValues[0]}`);
   }
   return { toolsets, readOnly: ro === "true" };
 }
@@ -203,7 +205,7 @@ export interface RegisterDeps {
   onBacklogUnauthorized: () => void;
   /** 現在時刻。省略時は `new Date()`。 */
   now?: () => Date;
-  /** 「今日」の基準タイムゾーン。省略時は DEFAULT_TIMEZONE。 */
+  /** 「今日」の基準タイムゾーンの既定(ツール引数 `timezone` が優先)。省略時は DEFAULT_TIMEZONE。 */
   timezone?: string;
   /** WriteNonIdempotent ツールの冪等キャッシュ(KV とユーザー ID)。省略時はキャッシュしない。 */
   idempotency?: IdempotencyDeps;
@@ -274,11 +276,14 @@ export function registerTools(
           client = deps.getClient(
             tool.maxApiCalls === undefined ? {} : { maxApiCalls: tool.maxApiCalls },
           );
+          // 引数 timezone があればそれを使う(不正な名前はクライアント由来なので argument_error)。
+          const tzArg = (parsed.data as { timezone?: unknown }).timezone;
           const toolCtx: ToolContext = {
             client,
             spaceHost: deps.spaceHost ?? "",
             now: deps.now ?? (() => new Date()),
-            timezone: deps.timezone || DEFAULT_TIMEZONE,
+            timezone:
+              typeof tzArg === "string" ? assertTimezone(tzArg) : deps.timezone || DEFAULT_TIMEZONE,
           };
           if (tool.category === "WriteNonIdempotent" && deps.idempotency) {
             // 明示キーは inputSchema に宣言しないので、zod の検証前の生の引数と params._meta から取る。

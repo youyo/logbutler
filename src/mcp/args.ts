@@ -22,6 +22,27 @@ export const reqStr = (description: string) =>
 export const reqText = (description: string) => z.string().describe(description);
 /** 任意の文字列。 */
 export const optStr = (description: string) => z.string().describe(description).optional();
+/**
+ * 任意の `timezone` 引数(IANA 名)。日付を解釈するツールだけに付ける。
+ * 検証はツール登録側(`registerTools`)がまとめて行い、不正な名前は argument_error にする。
+ */
+export const timezoneArg = () =>
+  optStr(
+    "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+  );
+
+/** IANA のタイムゾーン名として使えるか確かめる。使えなければ ArgumentError(クライアント由来の入力のため)。 */
+export function assertTimezone(value: string): string {
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: value });
+  } catch {
+    throw new ArgumentError(
+      `timezone must be an IANA time zone name (e.g. Asia/Tokyo, UTC), got "${value}"`,
+    );
+  }
+  return value;
+}
+
 /** 必須の整数 ID(JSON Schema 上は number)。 */
 export const reqInt = (description: string) =>
   z.number().refine(isInt, "must be an integer").describe(description);

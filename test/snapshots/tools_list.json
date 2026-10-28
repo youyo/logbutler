@@ -52,6 +52,10 @@
           "description": "Start date in YYYY-MM-DD format (default: 7 days ago)",
           "type": "string"
         },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
         "top_n": {
           "description": "Number of top actors/types to include (default: 5)",
           "type": "number"
@@ -88,6 +92,10 @@
           "description": "Start date in YYYY-MM-DD format (default: 1 day ago)",
           "type": "string"
         },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
         "until": {
           "description": "End date in YYYY-MM-DD format (default: now)",
           "type": "string"
@@ -116,6 +124,10 @@
         },
         "since": {
           "description": "Start date in YYYY-MM-DD format (default: 7 days ago)",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
           "type": "string"
         },
         "until": {
@@ -645,6 +657,10 @@
           "description": "Status filter: not-closed (IDs 1,2,3) or comma-separated numeric IDs",
           "type": "string"
         },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
         "updated_since": {
           "description": "Updated since (YYYY-MM-DD)",
           "type": "string"
@@ -795,6 +811,10 @@
         },
         "since": {
           "description": "Filter events since date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
           "type": "string"
         },
         "until": {
@@ -1045,6 +1065,10 @@
         "stale_days": {
           "description": "Days threshold for stale detection on watched issues (default 7)",
           "type": "number"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
         }
       },
       "required": [],

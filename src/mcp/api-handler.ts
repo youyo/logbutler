@@ -2,7 +2,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import type { GrantProps } from "../auth/props";
 import { createBacklogClient } from "../backlog/client";
 import type { Env } from "../env";
-import { ConfigError } from "../errors";
+import { QueryError } from "../errors";
 import { MCP_PATH, protectedResourceMetadataUrl } from "../urls";
 import { parseToolConfig } from "./registry";
 import { callMcpHandler } from "./request-body";
@@ -21,17 +21,16 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       const props = (ctx as ExecutionContext<GrantProps>).props;
       let backlogUnauthorized = false;
 
+      // toolsets / read_only は接続 URL のクエリで決まる(ADR 0008)。不正な値は 400 で理由を返す。
       let toolConfig: ReturnType<typeof parseToolConfig>;
       try {
-        toolConfig = parseToolConfig(env);
+        toolConfig = parseToolConfig(new URL(request.url).searchParams);
       } catch (e) {
-        if (!(e instanceof ConfigError)) throw e;
-        // 運用者向けの設定ミス。詳細はログにだけ出し、応答には出さない。
-        console.error(`misconfigured: ${e.message}`);
-        return new Response(JSON.stringify({ error: "server_misconfigured" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        });
+        if (!(e instanceof QueryError)) throw e;
+        return new Response(
+          JSON.stringify({ error: "invalid_query", error_description: e.message }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
       }
 
       const handler = createMcpHandler(
@@ -45,7 +44,6 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
               }),
             spaceHost: env.BACKLOG_SPACE_HOST,
             toolConfig,
-            timezone: env.LOGBUTLER_TIMEZONE,
             // 冪等キャッシュは OAUTH_KV の `idem:` 接頭辞のキーに置く（ADR 0005）。
             idempotency: { kv: env.OAUTH_KV, userId: props.backlogUserId },
             onBacklogUnauthorized: () => {

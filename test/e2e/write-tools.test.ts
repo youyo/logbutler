@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearJwksCache } from "../../src/auth/access-jwt";
-import worker from "../../src/index";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
   accessHeaders,
@@ -158,23 +157,10 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     expect(paths(calls).filter((p) => p === "POST /issues")).toHaveLength(2);
   });
 
-  it("LOGBUTLER_READ_ONLY=true: 書き込み・破壊的 14 ツールが tools/list から消え、呼んでも実行されない", async () => {
+  it("URL クエリ ?read_only=true: 書き込み・破壊的 14 ツールが tools/list から消え、呼んでも実行されない", async () => {
     const { token, calls } = await loggedIn({});
-    const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
     const rpcWith = async (readOnly: string, method: string, params: Record<string, unknown>) => {
-      const res = await worker.fetch(
-        new Request(MCP_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json, text/event-stream",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        }),
-        { ...env, LOGBUTLER_READ_ONLY: readOnly },
-        ctx,
-      );
+      const res = await mcpRequest(token, method, params, `${MCP_URL}?read_only=${readOnly}`);
       expect(res.status).toBe(200);
       return readRpc(res);
     };

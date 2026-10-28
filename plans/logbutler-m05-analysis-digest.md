@@ -43,6 +43,8 @@
 
 ## M05B: digest 系（6 個）+ user_activity
 
+**M05.5 での変更を反映（共通方針より優先）**: 環境変数 `LOGBUTLER_TIMEZONE` は廃止済み。日付を解釈するツール（digest_unified、user_activity、activity_digest）にはツール引数 `timezone`（M05.5 の `timezoneArg`、検証は registry が一括）を付け、`ctx.timezone` を読む。baseline 差分は `properties.timezone` の追加として許容リストに載せる。
+
 実装順: space_digest → document_digest → document_search → search → activity_digest → user_activity → digest_unified
 
 | ツール | 要点 | 意図した変更 |

@@ -193,7 +193,7 @@ describe("activity_stats: 集計", () => {
     act(6, 3, "2026-10-26T16:50:00Z", null),
   ];
 
-  it("by_type(名前)/ by_actor(なければ unknown)/ by_date / by_hour は LOGBUTLER_TIMEZONE で集計する", async () => {
+  it("by_type(名前)/ by_actor(なければ unknown)/ by_date / by_hour は timezone で集計する", async () => {
     const r = await run({}, { "GET /space/activities": sample });
     const a = r.json.analysis;
     expect(a.total_count).toBe(5);

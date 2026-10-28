@@ -28,7 +28,7 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 |---|---|---|---|
 | すべて | エラーはプレーンテキスト | spec §9 のエンベロープ(`isError: true`)。429 は `rate_limited` | ADR 0004 |
 | 全般(Backlog の生データを返すツール) | logvalet のドメイン型に詰め直して JSON 化 | Backlog の応答を**そのまま**返す(camelCase) | ADR 0004。変換しない |
-| `issue_list` の `due_date` / `start_date` | `today` などをサーバーのローカル時刻で解決 | 環境変数 `LOGBUTLER_TIMEZONE`(既定 `Asia/Tokyo`)の暦日で解決 | Workers は UTC で動く。週の始まりは月曜のまま |
+| `issue_list` の `due_date` / `start_date` | `today` などをサーバーのローカル時刻で解決 | ツール引数 `timezone`(IANA 名。省略時 `Asia/Tokyo`)の暦日で解決 | Workers は UTC で動く。週の始まりは月曜のまま。引数の追加は下の「M05.5」参照 |
 | `issue_list` の `project_key` + `project_keys` | 重なったキーも ID も重複して送る | 同じキーは 1 回だけ解決し、ID も重複させない | 無駄な API 呼び出しの削減 |
 | `shared_file_list` の `path` | 未エスケープでパスに埋め込む | `/` で分けたセグメントごとに `encodeURIComponent`。`.` と `..` のセグメントは `argument_error` | `?` `#` や `..` で別の API を叩けてしまうため |
 | すべての ID・キーのパス部分 | `url.PathEscape` | `encodeURIComponent`。`.` と `..` のみの値は `argument_error` | 同上(URL の正規化でパスを辿れる) |
@@ -81,12 +81,12 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 | `issue_context` | コメントは 1 回(既定の 20 件)で、`comment_count` はその件数 | `maxId` のカーソルで全件(上限 1,000)数える。`recent_comments` は新しい順の先頭 N 件。上限で止めたら `comments_truncated` と `truncated` | 計画書。`tools-analysis-context.test.ts` |
 | `issue_triage_materials` | 統計は 20 件の課題から。コメント件数は 20 件まで | プロジェクトの課題を全件(上限つき)、コメントを全件(上限つき)。warning の `component` は `project_stats` / `history.comment_count` | 計画書。`tools-analysis-triage.test.ts` |
 | `my_tasks` | overdue と upcoming の期間が重なると同じ課題が両方に出る | overdue を優先し、upcoming から除く(watching の除外にも使う) | `tools-analysis-my-tasks.test.ts` の重複 |
-| `my_tasks` | 日付はサーバーのローカル時刻。`date_range` は Go の `time.Time` | `LOGBUTLER_TIMEZONE` の暦日。`date_range` はオフセットつき RFC 3339。overdue / upcoming / watching はそれぞれ全件(上限つき) | 同上。`mode` が `week` / `next` 以外は `argument_error`(logvalet は week 扱いで `mode` をそのまま返した) |
+| `my_tasks` | 日付はサーバーのローカル時刻。`date_range` は Go の `time.Time` | `timezone` 引数(省略時 Asia/Tokyo)の暦日。`date_range` はオフセットつき RFC 3339。overdue / upcoming / watching はそれぞれ全件(上限つき) | 同上。`mode` が `week` / `next` 以外は `argument_error`(logvalet は week 扱いで `mode` をそのまま返した) |
 | `digest_daily` `digest_weekly` | `until` は 00:00 で切り、当日を含めない。課題一覧は 1 回(20 件) | `until` は当日 23:59:59.999(タイムゾーン基準)。ページングで全件。completed / started / blocked は issue_key 昇順。`since` / `until` はオフセットつき RFC 3339。GetProject の失敗はツールエラー(logvalet と同じ)、課題一覧の失敗は warning | ロードマップのユーザー決定。`tools-analysis-digest-periodic.test.ts`、e2e |
 | `issue_timeline` | コメントは 1 回(20 件)。`max_comments` は取得後に先頭から切る。アクティビティは全種別を 5 ページ | コメントを全件(上限つき)。`max_comments=0` は上限まで全件、N は期間で絞ったあとの新しい方から N 件。アクティビティは `activityTypeId[]=1,2,14` で絞って取る。since より古いものに届いたらページングをやめる。`max_activity_pages` は 1〜10 | 計画書。`tools-analysis-timeline.test.ts` |
 | `issue_timeline` `activity_stats` | `until` は 00:00 | 当日 23:59:59.999 | ロードマップのユーザー決定 |
 | `activity_stats` | ページ数の上限なし。未知の `scope` は space 扱い。project で `project_key` なし、user で `user_id` なしはそのまま API を呼んで失敗 | 10 ページが上限(`activities_truncated` と `truncated`)。未知の scope・必須キーの欠落は `argument_error`(Backlog を呼ばない)。`user_id` の `"me"` は GetMyself で解決 | 計画書。`tools-analysis-activity-stats.test.ts` |
-| `activity_stats` | `by_date` / `by_hour` / `peak_day_of_week` は UTC で集計 | `LOGBUTLER_TIMEZONE` で集計。`by_type` `by_actor` `by_date` はキー昇順 | 日付の解釈はタイムゾーン基準という方針の一貫性。UTC で見たいときは `LOGBUTLER_TIMEZONE=UTC`。`tools-analysis-activity-stats.test.ts` の集計 |
+| `activity_stats` | `by_date` / `by_hour` / `peak_day_of_week` は UTC で集計 | `timezone` 引数(省略時 Asia/Tokyo)で集計。`by_type` `by_actor` `by_date` はキー昇順 | 日付の解釈はタイムゾーン基準という方針の一貫性。UTC で見たいときは `timezone: "UTC"`。`tools-analysis-activity-stats.test.ts` の集計 |
 | 全般 | activity type 名の表が analysis と digest の 2 か所 | `src/analysis/activity-types.ts` の 1 か所 | 重複の排除 |
 
 ## logvalet で見つけた不具合の疑い(logvalet は変更しない)
@@ -105,3 +105,14 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 - `internal/analysis/timeline.go` は `max_comments` を取得後に切るだけで、コメントは 1 回（既定の 20 件）しか取らない。`internal/analysis/activity_stats.go` と `periodic.go` の `until` は 00:00 で切り、当日を含めない。
 - `internal/analysis/blocker.go` の `include_comments` は対象の全課題に 1 回ずつコメントを取りに行き（件数の上限なし）、失敗は黙って無視する。`internal/analysis/activity_stats.go` はページ数に上限がなく、未知の `scope` を space として扱う。
 - `plans/logbutler-m05-analysis-digest.md` の M05A の表（project_blockers の severity「前 2 つのどちらか→HIGH」）は、logvalet のコード（`high_priority_unassigned` と `overdue_open`）と食い違っている。
+
+## M05.5: クライアント制御への移行による差分
+
+| 対象 | logvalet | Logbutler | 理由 |
+|---|---|---|---|
+| `issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` の `inputSchema` | `timezone` 引数なし | 任意の文字列引数 `timezone`(IANA 名。省略時 `Asia/Tokyo`)を追加。不正な名前は `argument_error`(Backlog は呼ばない) | タイムゾーンの環境変数を廃止し、「今日」の基準を呼び出しごとにクライアントが決める(ロードマップのユーザー決定、2026-10-28)。`ALLOWED_CHANGES` に理由つきで載せ、`tools-list-snapshot.test.ts` が差分を `properties.timezone` の追加だけに固定。M05B の `digest_unified` `user_activity` `activity_digest` にも同じ引数を付ける |
+| `toolsets` / `read_only` | (logvalet に相当なし。Logbutler の仕組み) | `/mcp` の URL クエリ。不正値は 400 + 理由 | ADR 0008 |
+
+## 移植していないもの
+
+- `StaleConfig.StatusDays`(ステータス別の stale 閾値)。logvalet の Go ライブラリ側にはあるが MCP のツール引数には公開されておらず、Logbutler にも持ち込んでいない(`issue_stale` / `project_health` は全ステータス共通の `days` だけ)。

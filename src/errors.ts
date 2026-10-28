@@ -34,11 +34,14 @@ export class ArgumentError extends LogbutlerError {
   }
 }
 
-/** デプロイ設定の誤り(未知の toolset 名など)。リクエストではなく運用者が直すもの。 */
-export class ConfigError extends Error {
+/**
+ * /mcp の URL クエリの誤り(未知の toolset 名、読めない read_only など)。クライアントが接続 URL を直すもの。
+ * 応答は 400 で、message をそのまま本文に出す(設定ミスにすぐ気づけるように)。message に秘密は入れない。
+ */
+export class QueryError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "ConfigError";
+    this.name = "QueryError";
   }
 }
 

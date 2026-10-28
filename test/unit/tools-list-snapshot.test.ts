@@ -180,6 +180,29 @@ describe("tools/list スナップショット", () => {
     ]);
   });
 
+  it("許容した timezone 引数の差分は、6 ツールそれぞれ inputSchema.properties.timezone の追加だけ", async () => {
+    const tools = [
+      "issue_list",
+      "my_tasks",
+      "digest_daily",
+      "digest_weekly",
+      "activity_stats",
+      "issue_timeline",
+    ].map((n) => `logbutler_${n}`);
+    const result = compareWithBaseline(
+      await listTools(),
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: tools },
+    );
+    expect(result.changed.map((c) => c.name).sort()).toEqual([...tools].sort());
+    for (const c of result.changed) {
+      const diffs = c.diffs.map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }));
+      expect(diffs, c.name).toEqual([
+        { path: "inputSchema.properties.timezone", expected: undefined },
+      ]);
+    }
+  });
+
   it("baseline fixture は 71 ツールで、すべて logbutler_ に置換できる", () => {
     const tools = fromLogvaletBaseline(
       baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0],

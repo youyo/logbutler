@@ -76,7 +76,7 @@ GetProject と課題一覧(ページング)を 1 回だけ行い、stale / block
 ### 日付と時刻
 
 - 時刻はすべて `ToolContext.now`。`generated_at` は `now().toISOString()`(UTC、ミリ秒つき)。
-- 日付(`since` `until` `today` の暦日、`by_date` `by_hour` `peak_day_of_week` の集計)は `LOGBUTLER_TIMEZONE`。
+- 日付(`since` `until` `today` の暦日、`by_date` `by_hour` `peak_day_of_week` の集計)はツール引数 `timezone`(省略時 `Asia/Tokyo`)。
   `since` は当日 00:00、**`until` は当日 23:59:59.999**(当日を含める)。`since` / `until` 省略時は `now - N日` / `now`。
 - 出力の範囲(`date_range` `since` `until`)はオフセットつきの RFC 3339(例 `2026-10-26T00:00:00+09:00`)。Backlog から来た時刻
   (`updated` `dueDate` など)は元の文字列のまま返す。

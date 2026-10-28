@@ -14,6 +14,7 @@ import {
   resolveStatusIds,
   resolveUserId,
   seg,
+  timezoneArg,
   todayIn,
 } from "../args";
 import { defineTool } from "../registry";
@@ -56,6 +57,7 @@ export const issueList = defineTool({
     parent_issue_ids: optStr(
       'Comma-separated parent issue IDs to filter child issues (e.g. "100,200")',
     ),
+    timezone: timezoneArg(),
   }),
   handler: async (a, { client, now, timezone }) => {
     // 入力の検証は、Backlog を呼ぶ前にすべて済ませる。

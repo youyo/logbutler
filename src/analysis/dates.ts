@@ -1,5 +1,5 @@
 /**
- * 分析ツール共通の日付処理。日付の解釈は `LOGBUTLER_TIMEZONE`、時刻は `ToolContext.now`。
+ * 分析ツール共通の日付処理。日付の解釈はツール引数 `timezone`(`ToolContext.timezone`)、時刻は `ToolContext.now`。
  * logvalet は日付を UTC で読み、until を 00:00 で切っていた(当日を含めない)。ここでは until を当日の
  * 23:59:59.999(タイムゾーン基準)にする(ロードマップの決定事項)。
  */

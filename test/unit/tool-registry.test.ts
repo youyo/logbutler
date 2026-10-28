@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { BacklogApiError, BacklogUnauthorizedError } from "../../src/backlog/client";
-import { ArgumentError } from "../../src/errors";
+import { ArgumentError, QueryError } from "../../src/errors";
 import {
   annotationsFor,
   defineTool,
@@ -167,33 +167,38 @@ describe("toolset と環境変数", () => {
     ]);
   });
 
-  it("既定(未設定)は all・書き込みあり", () => {
-    expect(parseToolConfig({})).toEqual({ toolsets: "all", readOnly: false });
-    expect(parseToolConfig({ LOGBUTLER_TOOLSETS: "all" })).toEqual({
-      toolsets: "all",
-      readOnly: false,
-    });
-    expect(parseToolConfig({ LOGBUTLER_TOOLSETS: "" })).toEqual({
-      toolsets: "all",
-      readOnly: false,
-    });
+  const q = (query: string) => parseToolConfig(new URLSearchParams(query));
+
+  it("既定(クエリなし)は all・書き込みあり", () => {
+    expect(q("")).toEqual({ toolsets: "all", readOnly: false });
+    expect(q("toolsets=all")).toEqual({ toolsets: "all", readOnly: false });
+    expect(q("toolsets=")).toEqual({ toolsets: "all", readOnly: false });
   });
 
-  it("LOGBUTLER_TOOLSETS はカンマ区切り(空白・大文字を許す)", () => {
-    const c = parseToolConfig({ LOGBUTLER_TOOLSETS: " Issue, user ,shared_file" });
-    expect(c.toolsets).toEqual(new Set(["issue", "user", "shared_file"]));
+  it("toolsets はカンマ区切り(空白・大文字を許す)。toolsets を繰り返しても合算する", () => {
+    expect(q(`toolsets=${encodeURIComponent(" Issue, user ,shared_file")}`).toolsets).toEqual(
+      new Set(["issue", "user", "shared_file"]),
+    );
+    expect(q("toolsets=issue&toolsets=wiki").toolsets).toEqual(new Set(["issue", "wiki"]));
   });
 
-  it("未知の toolset 名は設定ミスとして例外にする(黙って全部消さない)", () => {
-    expect(() => parseToolConfig({ LOGBUTLER_TOOLSETS: "issue,isue" })).toThrow(/isue/);
+  it("未知の toolset 名は QueryError にする(黙って全部消さない)。どの名前が悪いか・有効な名前を含む", () => {
+    expect(() => q("toolsets=issue,isue")).toThrow(QueryError);
+    expect(() => q("toolsets=issue,isue")).toThrow(/toolsets.*isue.*wiki/);
   });
 
-  it("LOGBUTLER_READ_ONLY=true で読み取り専用。false・空は無効。他の値は例外", () => {
-    expect(parseToolConfig({ LOGBUTLER_READ_ONLY: "true" }).readOnly).toBe(true);
-    expect(parseToolConfig({ LOGBUTLER_READ_ONLY: "TRUE" }).readOnly).toBe(true);
-    expect(parseToolConfig({ LOGBUTLER_READ_ONLY: "false" }).readOnly).toBe(false);
-    expect(parseToolConfig({ LOGBUTLER_READ_ONLY: "" }).readOnly).toBe(false);
-    expect(() => parseToolConfig({ LOGBUTLER_READ_ONLY: "yes" })).toThrow(/LOGBUTLER_READ_ONLY/);
+  it("read_only=true で読み取り専用。false・空は無効。他の値や重複は QueryError", () => {
+    expect(q("read_only=true").readOnly).toBe(true);
+    expect(q("read_only=TRUE").readOnly).toBe(true);
+    expect(q("read_only=false").readOnly).toBe(false);
+    expect(q("read_only=").readOnly).toBe(false);
+    expect(() => q("read_only=yes")).toThrow(QueryError);
+    expect(() => q("read_only=yes")).toThrow(/read_only.*yes/);
+    expect(() => q("read_only=false&read_only=true")).toThrow(QueryError);
+  });
+
+  it("関係のないクエリは無視する(環境変数は読まない)", () => {
+    expect(q("foo=bar")).toEqual({ toolsets: "all", readOnly: false });
   });
 
   it("selectTools: toolset で絞る", () => {

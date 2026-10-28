@@ -48,7 +48,7 @@ logvalet の MCP ツールは JSON を text content で返し、エラーはプ�
 
 ### 設定
 
-- `LOGBUTLER_TOOLSETS`(カンマ区切り、既定 `all`)で有効にする toolset を選ぶ。`LOGBUTLER_READ_ONLY=true` で書き込み・破壊的ツールを登録しない。未知の toolset 名・読めない真偽値は設定ミスとして、`/mcp` が 500 を返す(詳細はログのみ)。typo で黙って全ツールが消える、読み取り専用のつもりで書き込めてしまう、を避けるため。
+- toolset の選択と読み取り専用は、M05.5 で環境変数から移した。`/mcp` の URL クエリ `?toolsets=`(カンマ区切り、既定 `all`)と `?read_only=true` で決める。未知の toolset 名・読めない真偽値は **400** で、理由を本文に返す(従来は 500 + ログのみ)。typo で黙って全ツールが消える、読み取り専用のつもりで書き込めてしまう、を避けるため。経緯は ADR 0008。
 
 ### M03 での追記
 
@@ -75,5 +75,6 @@ logvalet の MCP ツールは JSON を text content で返し、エラーはプ�
 
 #### 時刻
 
-- 「今日」「今週」は `LOGBUTLER_TIMEZONE`(IANA 名。既定 `Asia/Tokyo`)の暦日で解決する。ツールは `ctx.now()` / `ctx.timezone` を使い、
-  `Date.now()` を直接呼ばない(テストで差し替えるため)。不正なタイムゾーン名は運用者の設定ミスなので `generic_error` にして、詳細はログにだけ出す。
+- 「今日」「今週」はツール引数 `timezone`(IANA 名。省略時 `Asia/Tokyo`)の暦日で解決する(M05.5 で環境変数から移した。ADR 0008)。ツールは `ctx.now()` / `ctx.timezone` を使い、
+  `Date.now()` を直接呼ばない(テストで差し替えるため)。**引数**の不正なタイムゾーン名はクライアント由来なので `argument_error`。
+  呼び出し側(コード)が与える既定値 `RegisterDeps.timezone` が不正な場合だけ、設定ミスとして `generic_error`(詳細はログのみ)。

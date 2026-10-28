@@ -19,7 +19,7 @@ import { excludeSetFrom } from "../../analysis/statuses";
 import { buildTimeline } from "../../analysis/timeline";
 import { buildTriageMaterials } from "../../analysis/triage";
 import { buildWorkload } from "../../analysis/workload";
-import { optBool, optInt, optStr, positiveOr, reqStr } from "../args";
+import { optBool, optInt, optStr, positiveOr, reqStr, timezoneArg } from "../args";
 import { defineTool } from "../registry";
 
 export const issueContext = defineTool({
@@ -150,6 +150,7 @@ export const digestWeekly = defineTool({
     project_key: reqStr("Project key (e.g. PROJ)"),
     since: optStr("Start date in YYYY-MM-DD format (default: 7 days ago)"),
     until: optStr("End date in YYYY-MM-DD format (default: now)"),
+    timezone: timezoneArg(),
   }),
   maxApiCalls: API_BUDGET.digestPeriodic,
   handler: (a, ctx) => buildPeriodicDigest(ctx, "weekly", a),
@@ -165,6 +166,7 @@ export const digestDaily = defineTool({
     project_key: reqStr("Project key (e.g. PROJ)"),
     since: optStr("Start date in YYYY-MM-DD format (default: 1 day ago)"),
     until: optStr("End date in YYYY-MM-DD format (default: now)"),
+    timezone: timezoneArg(),
   }),
   maxApiCalls: API_BUDGET.digestPeriodic,
   handler: (a, ctx) => buildPeriodicDigest(ctx, "daily", a),
@@ -183,6 +185,7 @@ export const activityStats = defineTool({
     since: optStr("Start date in YYYY-MM-DD format (default: 7 days ago)"),
     until: optStr("End date in YYYY-MM-DD format (default: now)"),
     top_n: optInt("Number of top actors/types to include (default: 5)"),
+    timezone: timezoneArg(),
   }),
   maxApiCalls: API_BUDGET.activityStats,
   handler: (a, ctx) => buildActivityStats(ctx, a),
@@ -201,6 +204,7 @@ export const issueTimeline = defineTool({
     max_activity_pages: optInt("Max pages for activity pagination (default 5)"),
     since: optStr("Filter events since date (YYYY-MM-DD)"),
     until: optStr("Filter events until date (YYYY-MM-DD)"),
+    timezone: timezoneArg(),
   }),
   maxApiCalls: API_BUDGET.issueTimeline,
   handler: (a, ctx) => buildTimeline(ctx, a),
@@ -245,6 +249,7 @@ export const myTasks = defineTool({
       "View mode: 'week' (this week Mon-Sun, default) or 'next' (next 4-6 business days)",
     ),
     stale_days: optInt("Days threshold for stale detection on watched issues (default 7)"),
+    timezone: timezoneArg(),
   }),
   maxApiCalls: API_BUDGET.myTasks,
   handler: (a, ctx) => buildMyTasks(ctx, a),

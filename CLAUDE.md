@@ -19,7 +19,8 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - MCP ツールの出力は JSON を text content で返す(structuredContent は使わない)。キーは、**Backlog の生データは camelCase のまま、加工した出力は snake_case**(logvalet と同じ混在。ADR 0004)。
 - エラーは spec §9 のエンベロープ: `{"schema_version":"1","error":{"code":"...","message":"...","retryable":false}}` を `isError: true` で返す(`src/errors.ts`)。
 - Backlog API は 1 回のツール呼び出し内で直列(並列に呼ばない)。ページングは `src/backlog/paging.ts` を使い、ページ数の上限を付ける(ADR 0003)。呼び出しが膨らむツールは `defineTool` の `maxApiCalls` に最悪ケースの式から決めた値を明示し、テストで固定する(ADR 0006)。
-- 分析系の時刻は `ToolContext.now`、日付は `LOGBUTLER_TIMEZONE`(`until` は当日を含める)。完了集合は `src/analysis/statuses.ts`。
+- 分析系の時刻は `ToolContext.now`、日付はツール引数 `timezone`(省略時 Asia/Tokyo。`until` は当日を含める)。完了集合は `src/analysis/statuses.ts`。
+- **フラグは環境変数にしない**(ADR 0008)。公開ツールを決める `toolsets` / `read_only` は `/mcp` の URL クエリ(`parseToolConfig`。不正値は 400)、呼び出し単位の `timezone` はツール引数(`registerTools` が検証。不正値は `argument_error`)。
 - ツール名の接頭辞は `logbutler_`。
 
 ## 構成
