@@ -78,12 +78,12 @@ export async function pkcePair() {
   return { verifier, challenge: base64url(new Uint8Array(digest)) };
 }
 
-export async function registerClient(): Promise<string> {
+export async function registerClient(clientName = "Test MCP Client"): Promise<string> {
   const res = await worker.fetch(`${ORIGIN}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_name: "Test MCP Client",
+      client_name: clientName,
       redirect_uris: [CLIENT_REDIRECT],
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],

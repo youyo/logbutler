@@ -24,6 +24,13 @@ tools/list のスナップショットテストを用意する。M01 で作っ�
 
 ## 対象範囲
 
+### 0. M01 からの持ち越し（verifier の minor 指摘。最初に片付ける）
+- 同意画面の XSS: `client_name` に `<script>` を入れて DCR 登録し、同意 HTML でエスケープされることを確認するテストを足す
+- 偽造 state の `/callback` と、未登録 redirect_uri の `/authorize` が拒否されることを E2E で 1 件ずつ確認する
+- `src/auth/access-jwt.ts`: `jwtVerify` に `requiredClaims: ["exp"]` を足す（テストを先に）
+- `src/auth/access-jwt.ts`: 未知の kid による JWKS の強制再取得に最小間隔（60 秒）を設け、コメントを実態に合わせる（テストを先に）
+- `package.json`: `@modelcontextprotocol/client` / `@modelcontextprotocol/sdk` / `zod` が `agents` の peer 依存として本当に必要か確認し、不要なら削除、必要なら理由を ADR かコメントに残す（M02 で zod を使い始めるならそのまま）
+
 ### 1. Backlog クライアント（`src/backlog/`）
 - `client.ts`: 低レベルの `request(method, path, { query, form })`。上記 1〜6 を担う
 - M02 で入れる高レベルメソッドは M03 で必要になるものの土台だけでよい（`getMyself` を載せ替え、型の置き場所を決める）

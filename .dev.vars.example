@@ -10,3 +10,7 @@ BACKLOG_CLIENT_SECRET=
 # ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
 # ACCESS_AUD=
 # PUBLIC_BASE_URL=http://localhost:8787
+
+# ツールの絞り込み(任意)
+# LOGBUTLER_TOOLSETS=all
+# LOGBUTLER_READ_ONLY=false

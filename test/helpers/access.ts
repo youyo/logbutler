@@ -18,20 +18,20 @@ export interface SignOptions {
   email?: string;
   /** 発行時刻(エポック秒)。 */
   iat?: number;
-  /** 期限(エポック秒)。 */
-  exp?: number;
+  /** 期限(エポック秒)。null なら exp クレームを付けない(必須クレーム欠落の検証用)。 */
+  exp?: number | null;
 }
 
 export async function signAccessJwt(key: TestKey, opts: SignOptions = {}): Promise<string> {
   const iat = opts.iat ?? Math.floor(Date.now() / 1000);
-  return new SignJWT({ email: opts.email ?? "alice@example.com", type: "app" })
+  const jwt = new SignJWT({ email: opts.email ?? "alice@example.com", type: "app" })
     .setProtectedHeader({ alg: "RS256", kid: key.kid })
     .setIssuer(`https://${opts.teamDomain ?? "logbutler-test.cloudflareaccess.com"}`)
     .setAudience(opts.aud ?? "test-access-aud")
     .setSubject("access-user-1")
-    .setIssuedAt(iat)
-    .setExpirationTime(opts.exp ?? iat + 300)
-    .sign(key.privateKey);
+    .setIssuedAt(iat);
+  if (opts.exp !== null) jwt.setExpirationTime(opts.exp ?? iat + 300);
+  return jwt.sign(key.privateKey);
 }
 
 export function jwksResponse(...keys: TestKey[]): Response {

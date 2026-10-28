@@ -16,8 +16,9 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 
 ## 出力規約(logvalet 互換)
 
-- MCP ツールの出力は JSON を text content で返し、**キーは snake_case**(Backlog の camelCase を変換する)。
+- MCP ツールの出力は JSON を text content で返す(structuredContent は使わない)。キーは、**Backlog の生データは camelCase のまま、加工した出力は snake_case**(logvalet と同じ混在。ADR 0004)。
 - エラーは spec §9 のエンベロープ: `{"schema_version":"1","error":{"code":"...","message":"...","retryable":false}}` を `isError: true` で返す(`src/errors.ts`)。
+- Backlog API は 1 回のツール呼び出し内で直列(並列に呼ばない)。ページングは `src/backlog/paging.ts` を使い、ページ数の上限を付ける(ADR 0003)。
 - ツール名の接頭辞は `logbutler_`。
 
 ## 構成
@@ -34,7 +35,7 @@ src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変�
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)
 src/mcp/tools/                ツール(M01 は user-me のみ)
 src/backlog/client.ts         Backlog API クライアント
-test/unit/  test/e2e/  test/helpers/
+test/unit/  test/e2e/  test/helpers/  test/fixtures/(logvalet の tools/list baseline)  test/snapshots/(tools/list のスナップショット)
 ```
 
 ## テストの書き方
@@ -43,6 +44,7 @@ test/unit/  test/e2e/  test/helpers/
 - E2E は `test/helpers/oauth-flow.ts` の `worker.fetch`(Worker 全体への HTTP)で、`/register` → `/authorize` → `/callback` → `/token` → `/mcp` を通しで行う。Backlog と Access JWKS は `vi.spyOn(globalThis, "fetch")` で差し替える(同じ isolate で動くため Worker にも効く)。
 - 時刻に依存する挙動(Backlog トークンの期限切れ)は `vi.useFakeTimers({ toFake: ["Date"] })` で進める。コード側は `Date.now` の参照を保持せず、呼び出し時に `Date.now()` を読むこと。
 - Access の JWT はテスト用の鍵ペアで署名する(`test/helpers/access.ts`)。
+- ツールを足す・変えたら `test/snapshots/tools_list.json` を意図して更新する: `mise run test:update-snapshots`。logvalet の baseline との比較は `test/helpers/baseline.ts`(許容する差分は理由つきで `ALLOWED_*` に足す)。
 
 ## API の確認
 

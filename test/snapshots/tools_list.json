@@ -1,0 +1,17 @@
+[
+  {
+    "name": "logbutler_user_me",
+    "description": "Get the authenticated user's information",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "認証ユーザー情報取得"
+    }
+  }
+]

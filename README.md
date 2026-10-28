@@ -3,8 +3,8 @@
 **Your AI Butler for Backlog** — Backlog を AI エージェントから使うための Remote MCP サーバー。
 Cloudflare Workers 上で動き、Cloudflare MCP Server Portals 経由で使うことを前提にしている。
 
-Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Remote MCP 機能を TypeScript に移植するプロジェクトで、現在は **M01(雛形と認証の骨格)** まで。
-ツールはダミーの `logbutler_user_me`(認証ユーザー情報)だけで、残りは `plans/logbutler-roadmap.md` の M02 以降で移植する。
+Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Remote MCP 機能を TypeScript に移植するプロジェクトで、現在は **M02(Backlog クライアントと基盤)** まで。
+ツールは `logbutler_user_me`(認証ユーザー情報)だけで、残りは `plans/logbutler-roadmap.md` の M03 以降で移植する。
 
 > **商標について**: Backlog は株式会社ヌーラボの登録商標です。Logbutler は個人プロジェクトであり、株式会社ヌーラボとは無関係です。
 
@@ -24,6 +24,8 @@ MCP クライアント (Portal) ──/mcp, /token, /register, /.well-known/*─
 
 - [ADR 0001: Worker 自身を OAuth 認可サーバーにする](docs/adr/0001-oauth-server-in-worker.md)
 - [ADR 0002: 認可サーバーと MCP サーバーを 1 つの Worker に同居させる](docs/adr/0002-single-worker-auth-and-mcp.md)
+- [ADR 0003: Backlog クライアントの直列化・リトライ・呼び出し上限](docs/adr/0003-backlog-client-serialization-and-retry.md)
+- [ADR 0004: ツールの出力形式とエラー形式](docs/adr/0004-tool-output-and-error-format.md)
 
 ## 開発
 
@@ -55,6 +57,8 @@ mise run dev            # wrangler dev
 | `PUBLIC_BASE_URL` | var | この Worker の公開オリジン(例 `https://logbutler.example.com`)。issuer とリソース識別子になる |
 | `BACKLOG_CLIENT_ID` | secret | Backlog OAuth クライアント ID |
 | `BACKLOG_CLIENT_SECRET` | secret | Backlog OAuth クライアントシークレット |
+| `LOGBUTLER_TOOLSETS` | var(任意) | 有効にするツールのグループ(カンマ区切り、既定 `all`)。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` |
+| `LOGBUTLER_READ_ONLY` | var(任意) | `true` で書き込み・破壊的ツールを登録しない(既定 `false`) |
 
 ローカルでは `.dev.vars.example` をコピーして `.dev.vars` を作る(コミットしない)。
 

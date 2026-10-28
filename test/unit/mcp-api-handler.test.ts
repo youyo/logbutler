@@ -14,7 +14,7 @@ const props: GrantProps = {
 };
 const ctx = { waitUntil() {}, passThroughOnException() {}, props } as unknown as ExecutionContext;
 
-function callTool() {
+function callTool(testEnv: object = env) {
   return createMcpApiHandler().fetch(
     new Request("https://logbutler.test/mcp", {
       method: "POST",
@@ -29,7 +29,22 @@ function callTool() {
         params: { name: "logbutler_user_me", arguments: {} },
       }),
     }),
-    env,
+    testEnv as typeof env,
+    ctx,
+  );
+}
+
+function listTools(testEnv: object) {
+  return createMcpApiHandler().fetch(
+    new Request("https://logbutler.test/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    }),
+    testEnv as typeof env,
     ctx,
   );
 }
@@ -59,5 +74,25 @@ describe("MCP API handler (/mcp の下流)", () => {
     );
     // Backlog のトークンは応答に含まれない
     expect(await res.text()).not.toContain("backlog-at");
+  });
+
+  it("LOGBUTLER_TOOLSETS で有効なグループを絞る(user_me は user グループ)", async () => {
+    const withUser = await (await listTools({ ...env, LOGBUTLER_TOOLSETS: "user" })).text();
+    expect(withUser).toContain("logbutler_user_me");
+    const withoutUser = await (
+      await listTools({ ...env, LOGBUTLER_TOOLSETS: "issue,wiki" })
+    ).text();
+    expect(withoutUser).not.toContain("logbutler_user_me");
+  });
+
+  it("LOGBUTLER_READ_ONLY=true でも読み取りツールは残る", async () => {
+    const res = await (await listTools({ ...env, LOGBUTLER_READ_ONLY: "true" })).text();
+    expect(res).toContain("logbutler_user_me");
+  });
+
+  it("設定ミス(未知の toolset)は 500 で、詳細は応答に出さない", async () => {
+    const res = await listTools({ ...env, LOGBUTLER_TOOLSETS: "isue" });
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain("isue");
   });
 });

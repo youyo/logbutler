@@ -31,15 +31,20 @@ export class AccessJwtError extends Error {
 }
 
 const JWKS_TTL_MS = 5 * 60 * 1000;
+/** 未知の kid を理由にした JWKS の強制再取得の最小間隔。不正な JWT の連投で Access への通信を増やさない。 */
+const JWKS_FORCE_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
 
 interface CachedJwks {
   jwks: JSONWebKeySet;
   fetchedAt: number;
 }
 const cache = new Map<string, CachedJwks>();
+/** teamDomain ごとの、最後に強制再取得した時刻。 */
+const lastForcedAt = new Map<string, number>();
 
 export function clearJwksCache(): void {
   cache.clear();
+  lastForcedAt.clear();
 }
 
 async function fetchJwks(teamDomain: string): Promise<JSONWebKeySet> {
@@ -61,9 +66,15 @@ async function fetchJwks(teamDomain: string): Promise<JSONWebKeySet> {
 }
 
 async function getJwks(teamDomain: string, forceRefresh: boolean): Promise<JSONWebKeySet> {
+  if (forceRefresh) lastForcedAt.set(teamDomain, Date.now());
   const hit = cache.get(teamDomain);
   if (!forceRefresh && hit && Date.now() - hit.fetchedAt < JWKS_TTL_MS) return hit.jwks;
   return fetchJwks(teamDomain);
+}
+
+function canForceRefresh(teamDomain: string): boolean {
+  const last = lastForcedAt.get(teamDomain);
+  return last === undefined || Date.now() - last >= JWKS_FORCE_REFRESH_MIN_INTERVAL_MS;
 }
 
 async function verifyOnce(token: string, cfg: AccessJwtConfig, forceRefresh: boolean) {
@@ -72,6 +83,7 @@ async function verifyOnce(token: string, cfg: AccessJwtConfig, forceRefresh: boo
     issuer: `https://${cfg.teamDomain}`,
     audience: cfg.aud,
     algorithms: ["RS256"],
+    requiredClaims: ["exp"],
   });
 }
 
@@ -86,9 +98,10 @@ export async function verifyAccessJwt(
     try {
       result = await verifyOnce(token, cfg, false);
     } catch (e) {
-      // 未知の kid は鍵ローテーションの可能性があるので、JWKS を 1 回だけ取り直す。
-      // (署名不一致では取り直さない: 不正な JWT を連投されても JWKS への通信が増えないようにする)
-      if (e instanceof errors.JWKSNoMatchingKey) {
+      // 未知の kid は鍵ローテーションの可能性があるので、JWKS を強制的に取り直す。ただし強制再取得は
+      // teamDomain ごとに 60 秒に 1 回まで(未知の kid の JWT を連投されても Access への通信が増えない)。
+      // 署名不一致では取り直さない。
+      if (e instanceof errors.JWKSNoMatchingKey && canForceRefresh(cfg.teamDomain)) {
         result = await verifyOnce(token, cfg, true);
       } else {
         throw e;

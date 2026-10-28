@@ -16,6 +16,10 @@ export interface Env {
   BACKLOG_CLIENT_ID: string;
   /** Backlog OAuth クライアントシークレット(secret)。 */
   BACKLOG_CLIENT_SECRET: string;
+  /** 有効にするツールのグループ(カンマ区切り)。既定 `all`。`src/mcp/registry.ts` の TOOLSETS を参照。 */
+  LOGBUTLER_TOOLSETS?: string;
+  /** `true` で書き込み・破壊的ツールを登録しない。既定 `false`。 */
+  LOGBUTLER_READ_ONLY?: string;
   /** OAuthProvider が defaultHandler に渡すヘルパー。 */
   OAUTH_PROVIDER: OAuthHelpers;
 }

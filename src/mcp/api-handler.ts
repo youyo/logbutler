@@ -2,7 +2,9 @@ import { createMcpHandler } from "agents/mcp/server";
 import type { GrantProps } from "../auth/props";
 import { createBacklogClient } from "../backlog/client";
 import type { Env } from "../env";
+import { ConfigError } from "../errors";
 import { MCP_PATH, protectedResourceMetadataUrl } from "../urls";
+import { parseToolConfig } from "./registry";
 import { createMcpServer } from "./server";
 
 /**
@@ -18,6 +20,19 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       const props = (ctx as ExecutionContext<GrantProps>).props;
       let backlogUnauthorized = false;
 
+      let toolConfig: ReturnType<typeof parseToolConfig>;
+      try {
+        toolConfig = parseToolConfig(env);
+      } catch (e) {
+        if (!(e instanceof ConfigError)) throw e;
+        // 運用者向けの設定ミス。詳細はログにだけ出し、応答には出さない。
+        console.error(`misconfigured: ${e.message}`);
+        return new Response(JSON.stringify({ error: "server_misconfigured" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       const handler = createMcpHandler(
         () =>
           createMcpServer({
@@ -26,6 +41,7 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
                 spaceHost: env.BACKLOG_SPACE_HOST,
                 accessToken: props.backlogAccessToken,
               }),
+            toolConfig,
             onBacklogUnauthorized: () => {
               backlogUnauthorized = true;
             },

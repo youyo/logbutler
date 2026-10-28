@@ -102,3 +102,59 @@ describe("E2E 5: /authorize と /callback は正しい Cf-Access-Jwt-Assertion �
     expect((await worker.fetch(MCP_URL, { method: "POST", body: "{}" })).status).toBe(401);
   });
 });
+
+describe("E2E 6: 認可フローの入力検証(M01 持ち越し)", () => {
+  it("client_name に <script> を入れて登録しても、同意画面ではエスケープされる", async () => {
+    const { accessKey } = await setupMocks();
+    const payload = "<script>alert(1)</script>";
+    const clientId = await registerClient(payload);
+    const { challenge } = await pkcePair();
+    const url = new URL(`${ORIGIN}/authorize`);
+    url.search = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: CLIENT_REDIRECT,
+      state: "s",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: MCP_URL,
+    }).toString();
+    const res = await worker.fetch(url.toString(), { headers: await accessHeaders(accessKey) });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain(payload);
+    expect(html).toContain("&#60;script&#62;alert(1)&#60;/script&#62;");
+  });
+
+  it("偽造した state の /callback は拒否し、Backlog のトークン交換をしない", async () => {
+    const { accessKey, callsTo } = await setupMocks();
+    const res = await worker.fetch(`${ORIGIN}/callback?code=backlog-code&state=forged-state`, {
+      headers: await accessHeaders(accessKey),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(res.headers.get("Location")).toBeNull();
+    expect(callsTo("POST https://example.backlog.com/api/v2/oauth2/token")).toHaveLength(0);
+  });
+
+  it("未登録の redirect_uri の /authorize は同意画面を出さず拒否する(クライアントへもリダイレクトしない)", async () => {
+    const { accessKey } = await setupMocks();
+    const clientId = await registerClient();
+    const { challenge } = await pkcePair();
+    const url = new URL(`${ORIGIN}/authorize`);
+    url.search = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: "https://evil.example/cb",
+      state: "s",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: MCP_URL,
+    }).toString();
+    const res = await worker.fetch(url.toString(), { headers: await accessHeaders(accessKey) });
+    expect(res.status).toBe(400);
+    expect(res.headers.get("Location")).toBeNull();
+    expect(await res.text()).not.toContain('name="handle"');
+  });
+});
