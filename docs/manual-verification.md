@@ -73,7 +73,7 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
   4. 最初の更新から 2 分以内に、別経路から `--refresh-only` と `tools/call` を行う(KV の伝播が最大 60 秒ほどかかる想定)。
   5. `mise run verify:oauth -- https://<domain>/mcp --refresh-only` を同時に 3〜5 本起動する（例: シェルで各コマンドに `&` を付けて並列実行し、最後に `wait`）。
 - 期待結果: すべて `user_me_after_refresh` が OK。`invalid_grant`(`authorize を再度` の案内)や 503 が出ない。出た場合は NG とし、発生の間隔・経路を記録する。並列実行（手順 5）: すべて成功する。V01 で Backlog のリフレッシュトークンがローテーションすると分かった場合、1 本以上が invalid_grant で失敗するなら ADR 0001 の未検証 1（並列更新の競合）が現実の問題になる。結果を記入し、失敗した場合は ADR 0001 に追記する。
-- 結果: 連続 [ 回数 ] ／ 別経路 [ あり / なし ] ／ 並列 [ 本数 / 成功本数 ] ／ エラー [ なし / あり: ] ／ 判定 [ OK / NG / 要対応 ] ／ メモ:
+- 結果: 連続 [ 未実施 ] ／ 別経路 [ なし ] ／ 並列 [ **5 本 / 5 本成功** ] ／ エラー [ なし(並列実行時) ] ／ 判定 [ **OK**(並列のみ) ] ／ メモ: 2026-10-29 07:01、Backlog の失効(05:00 取得のトークン)後に、同じ状態ファイルの複製 5 つから `--refresh-only` を同時に実行。5 本とも `refresh` と `user_me_after_refresh` が OK。Worker のログは `backlog_token` が 5 件(`expires_in:3599`、`refresh_token_rotated:false`)、`token_exchange` が 5 件(`backlog_remaining_seconds:-3695`、`refreshed:true`、`access_token_changed:true`)。直後の `/mcp` 5 件もすべて 200。その後 5 つの状態を順に使うと、**有効だったのは 1 つだけ**で、残る 4 つは `invalid_grant: Invalid refresh token`。原因は workers-oauth-provider の grant の書き込みが後勝ちになること(Logbutler 側の不具合ではない)。Backlog はローテーションしない(V01)ので、Backlog 側の競合は起きない。別経路(別 colo)からの連続実行は未実施。
 - 2026-10-29 の観測(ADR 0001 の未検証 5、検証用 Worker): 02:57 認可 → 03:11〜03:56 に `/token` 十数回(すべて 200)→ 03:56:06 の `/token` の MCP トークンで 03:57:00 から全ツールが HTTP 401 → 03:58 ごろの `/token` の後に回復。KV が古い `props` を返したのなら保存期限は 03:57 のままで 03:56:06 にも Backlog を更新したはずなので、**KV の結果整合だけでは説明できない**(V03 の寿命の食い違いの方が疑わしい)。
 - 対策後の確認: Backlog が 401 を返すと `backlog_unauthorized`(`stale_marked: true`)が出て、直後の `/token` で `token_exchange` が `stale_marker: true, refreshed: true` になること。`stale_marker: false` のまま 401 が続くなら、`/mcp` と `/token` が別 colo で印が伝播していない(数十秒で回復するはず)。
 
@@ -189,7 +189,7 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
   1. デプロイ直後に `curl -s -o /dev/null -w '%{http_code}\n' $BASE/healthz` と本文を確認する(secrets 投入前なら `503` と欠けた項目名、投入後は `200`)。
   2. V05 / V14 を実施したあと、Workers Logs(ダッシュボードまたは `mise run deploy:render` のあと `wrangler tail <Worker 名>`)で、`access_token` `refresh_token` `Bearer ` `client_secret` の文字列を検索する。
 - 期待結果: 1 は設定どおりの応答。2 はヒット 0 件(トークンやシークレットの値がログに出ない)。
-- 結果: healthz [ 503→200 / 200 ] ／ ログ検索 [ 0 件 / あり: ] ／ 判定 [ OK / NG ] ／ メモ:
+- 結果: healthz [ **200**(secrets 投入後) ] ／ ログ検索 [ **0 件** ] ／ 判定 [ **OK** ] ／ メモ: 2026-10-29、検証用 Worker の `wrangler tail --format json` の記録(2,069 件。実環境 E2E 86 件の実行と V01〜V03・V02 の確認を含む)を調べた。アプリのログは `backlog_token` 16 件と `token_exchange` 27 件だけで、キーは `event` `grant_type` `expires_in` `refresh_token_rotated` `backlog_remaining_seconds` `needs_refresh` `stale_marker` `refreshed` `access_token_changed` `ttl_basis` `access_token_ttl` のみ(値なし)。ほかはライブラリの `OAuth error response: 400 invalid_grant - ...` などで、トークンの値はない。`Bearer ` / `"access_token":"` / `"refresh_token":"` のヒットは 0 件。リクエストの `authorization` ヘッダーは tail 側で全件 `REDACTED`(1,973 件)。
 
 ### V16 匿名の `/register` への対策(WAF / Rate Limiting)
 
