@@ -39,6 +39,8 @@ logvalet v0.40 の `remote-mcp-request-contract.md` の方式。Worker は OAuth
 
 ## 未検証の前提(実デプロイしていないため、実 API で確認が必要)
 
+確認手順と結果の記入欄は [docs/manual-verification.md](../manual-verification.md)(項目 V01 〜 V04)。
+
 1. **Backlog のリフレッシュトークンがローテーション(更新のたびに変わる)するか**。実装は両対応: トークン応答に `refresh_token` があれば `props` を差し替え、なければ元のものを維持する(`src/auth/backlog-oauth.ts`)。ローテーションする場合、同じ grant で更新が並列に走ると古いリフレッシュトークンが失効して `invalid_grant` になりうる。MCP の更新が Worker 側でトークン単位に直列化される保証は、ライブラリが旧トークンを次の使用まで有効に保つ挙動に頼っており、実機では未確認。
 2. **KV の結果整合性がリフレッシュ直後のトークン利用に影響しないか**。KV の書き込みは別ロケーションに最大 60 秒ほどで反映される。更新直後に別ロケーションの isolate が古い `props` を読むと、失効済みの Backlog リフレッシュトークンで更新を試みる可能性がある(ローテーション有りの場合)。テストは Miniflare のローカル KV で行っており、この挙動は再現できない。M07 の実デプロイで確認する。
 3. Backlog のアクセストークンの実際の `expires_in`(約 1 時間と想定)。実装は応答の `expires_in` をそのまま使う。

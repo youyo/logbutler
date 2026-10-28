@@ -1,5 +1,7 @@
 # ADR 0007: 応答サイズの上限(最後の安全網)
 
+> ダウンロード 20 MiB の実機確認は [docs/manual-verification.md](../manual-verification.md) の V10。
+
 - 状態: 採用(M06、2026-10-28)
 - 関連: ADR 0004(出力とエラー)、ADR 0006(上限つき取得)、ADR 0008(フラグのクライアント制御)
 

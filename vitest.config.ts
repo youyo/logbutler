@@ -21,8 +21,17 @@ function project(name: string, include: string) {
   };
 }
 
+// verify:oauth のループバック受信(node:http)は workerd では動かないので、Node 環境のプロジェクトで実機の HTTP を確かめる。
+const nodeProject = {
+  test: { name: "node", environment: "node", include: ["test/node/**/*.test.ts"] },
+};
+
 export default defineConfig({
   test: {
-    projects: [project("unit", "test/unit/**/*.test.ts"), project("e2e", "test/e2e/**/*.test.ts")],
+    projects: [
+      project("unit", "test/unit/**/*.test.ts"),
+      project("e2e", "test/e2e/**/*.test.ts"),
+      nodeProject,
+    ],
   },
 });

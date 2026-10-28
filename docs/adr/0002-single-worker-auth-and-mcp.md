@@ -37,4 +37,6 @@
 
 ## 未検証の前提
 
+確認手順と結果の記入欄は [docs/manual-verification.md](../manual-verification.md)(V01・V02、Portal 関連は P1 〜 P5、CIMD は V07)。
+
 ADR 0001 と共通(Backlog のリフレッシュトークンのローテーション有無、KV の結果整合性)。加えて、実際の Cloudflare MCP Server Portals が DCR/CIMD のどちらで接続してくるかは未確認(M01 は DCR のみ有効。CIMD は `global_fetch_strictly_public` フラグが必要で、M07 で Portal の挙動を見て判断する)。

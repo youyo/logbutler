@@ -7,3 +7,7 @@ dist/
 mise.local.toml
 *.log
 .DS_Store
+
+# verify:oauth が保存する状態(リフレッシュトークンを含む)
+.verify-oauth.local.json
+*.local.json

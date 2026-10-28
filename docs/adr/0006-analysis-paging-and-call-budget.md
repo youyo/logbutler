@@ -151,6 +151,8 @@ logvalet の blocker と同じ)。
 
 ## 帰結
 
+有料プランの subrequest 上限と未公開 API(`relatedIssues`)の実機確認は [docs/manual-verification.md](../manual-verification.md) の V13・V09。
+
 - 1 回の分析ツール呼び出しは最大 105 回(`project_blockers` + `include_comments`)。Backlog のレート制限の約 17%、Workers 無料プランの
   subrequest 上限(50)を超えるツールがある(`issue_stale` 55 など)。**分析ツールは有料プランを前提にする**(ADR 0003 の「有料プランの範囲で上げる」)。
 - 直列なので、最悪ケースは遅い(100 ms/回として 10 秒台)。MCP クライアントの待ち時間に収まる範囲として受け入れる。

@@ -31,6 +31,8 @@ logvalet のキャッシュには次の問題があった。
 
 ## 限界(受け入れる)
 
+`priorityId` を送らない `issue_create` の実機確認は [docs/manual-verification.md](../manual-verification.md) の V08。
+
 KV は結果整合で、排他制御(ロック)もない。したがって:
 
 - **ほぼ同時の 2 回の呼び出しは、両方実行されうる**。1 回目の保存が 2 回目の読み取りに間に合わない。logvalet はプロセス内で「実行中なら完了を待つ」ことで防いでいたが、同じことには Durable Objects が要る。Durable Objects は使わない方針(ADR 0001・ロードマップ)なので受け入れる。これは再送(時間をおいた同じ呼び出し)への対策であり、同時実行の排他ではない。

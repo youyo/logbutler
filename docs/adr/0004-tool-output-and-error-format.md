@@ -1,5 +1,7 @@
 # ADR 0004: ツールの出力形式とエラー形式
 
+> 20 MiB ダウンロードの workerd 上のメモリ・時間の実機確認は [docs/manual-verification.md](../manual-verification.md) の V10。
+
 - 状態: 採用(M02)
 - 日付: 2026-10-28(出力とエラーの方針はユーザー決定、ロードマップ「決定済み事項」)
 

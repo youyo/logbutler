@@ -38,7 +38,7 @@ M05A までは、ツールの公開範囲(toolset・読み取り専用)と「今
 - resource 識別子(RFC 9728 / トークンの audience)は `https://<host>/mcp`(クエリなし)のまま。
 - `OAuthProvider` は `/mcp?toolsets=...` をパス `/mcp` として扱い、Bearer の検証が通る(E2E `client-control.test.ts`)。
 - 401 の `WWW-Authenticate` の `resource_metadata` はクエリを含まない正規 URL を指す。Backlog が 401 のときの `invalid_token` チャレンジも同じ。
-- **未検証の前提**: Cloudflare MCP Server Portal が、登録された URL のクエリ(`?toolsets=...&read_only=true`)をそのまま保持して
+- **未検証の前提**(確認手順は [docs/manual-verification.md](../manual-verification.md) の P3): Cloudflare MCP Server Portal が、登録された URL のクエリ(`?toolsets=...&read_only=true`)をそのまま保持して
   上流の Worker へ送ること。クエリ付き URL でのクライアント登録・トークン取得(`resource` パラメータの照合)が Portal 経由で通ること。
   M07 の手動確認項目にする。Portal がクエリを落とす場合の代替案は、toolset 別のパス(`/mcp/issue` など)だが、resource 識別子が増えるため採用していない。
 
@@ -66,7 +66,7 @@ M05A までは、ツールの公開範囲(toolset・読み取り専用)と「今
 `application_type: "native"` と localhost / 127.0.0.1 の `redirect_uris`(`http://`)を送るクライアントは**登録できる**(201)。
 `workers-oauth-provider` は `application_type` を読まず(拒否も保存も応答への反映もしない)、loopback の `http` redirect_uri は RFC 8252 §7.3 どおり許可する。
 `application_type` が使われる場面(例: クライアント種別による redirect_uri の検査)は Logbutler にはなく、実害はない。
-M07 では、実際に Portal / 各 MCP クライアントが送る DCR リクエストで登録に失敗しないことを確認項目に入れる。
+M07 では、実際に Portal / 各 MCP クライアントが送る DCR リクエストで登録に失敗しないことを確認項目に入れた([docs/manual-verification.md](../manual-verification.md) の V05・V06・P2)。
 
 ## 結果・残課題
 

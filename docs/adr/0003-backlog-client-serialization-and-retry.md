@@ -16,6 +16,8 @@ Logbutler は Workers 上のステートレスな MCP サーバーで、ユー�
 
 ## 決定
 
+実機での確認(429 の実際の `Retry-After`、有料プランの subrequest 上限)は [docs/manual-verification.md](../manual-verification.md) の V12・V13。
+
 `src/backlog/client.ts` の `createBacklogClient` は **1 回のツール呼び出しにつき 1 つ**作る(`registerTools` の `getClient` を tools/call ごとに呼ぶ)。状態(直列化のキュー・呼び出し回数)はクライアントごとに持つ。
 
 | 項目 | 既定値 | 根拠 |

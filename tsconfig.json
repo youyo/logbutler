@@ -11,7 +11,15 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "vitest.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts",
+    "scripts/verify-oauth/core.ts",
+    "scripts/verify-oauth/args.ts"
+  ],
+  "exclude": ["test/node"]
 }

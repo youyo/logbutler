@@ -39,7 +39,7 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 | `activity_list` の `user_id` と `project_key` | 同時指定は error | 同じ(`argument_error`)。空文字は未指定として扱う | — |
 | 引数の型違い・必須の欠落 | 各ツールで「x is required」 | zod の検証で `argument_error`(どの引数が悪いかを message に入れる) | `registerTools` が一括で検証する |
 | 冪等キャッシュ(`issue_create` `issue_comment_add` `issue_attachment_upload` `document_create`) | プロセス内メモリ。キーにユーザーなし。`params._meta` は本番で読めていなかった。エラーもキャッシュ | KV(`idem:<ユーザーID>:<ツール>:<explicit\|hash>:<値>`)。ユーザーごとに分離。`params._meta.idempotency_key` → 引数 `idempotency_key` の順。**成功した結果だけ** TTL 5 分で保存。ほぼ同時の 2 回は両方実行されうる | ADR 0005 |
-| `issue_create` の `priority_id` | 未指定でも `priorityId=0` を送る | 未指定(0 を含む)なら `priorityId` を送らない | 0 は有効な優先度 ID ではない。実機での挙動は未検証の前提(Backlog が 0 を既定の「中」に読み替えるのか、エラーにするのかは確認していない) |
+| `issue_create` の `priority_id` | 未指定でも `priorityId=0` を送る | 未指定(0 を含む)なら `priorityId` を送らない | 0 は有効な優先度 ID ではない。実機での挙動は未検証の前提(Backlog が 0 を既定の「中」に読み替えるのか、エラーにするのかは確認していない。[manual-verification.md](manual-verification.md) の V08) |
 | `issue_attachment_upload` | `file_paths` でサーバー上のパスも受け取る | `file_paths` なし。base64 のみ。上限 4 MiB は**デコード後の実サイズ**で判定（ちょうど 4 MiB は通り、4 MiB + 1 は `argument_error`）。`file_name` が空・`.`・`..` なら `argument_error` | 推定 `(len/4)*3` は、ちょうど 4 MiB を誤って弾きうる。base64 長が上限の約 1.25 倍を超える入力はデコードせずに弾く |
 | MCP の POST 本文の上限 | 4 MiB 相当 | 8 MiB（`src/mcp/request-body.ts`）。超えたら 413 | 4 MiB のファイルを base64 にして JSON に入れると約 5.6 MB。agents の stateless ハンドラは `maxRequestBodySize` を 2025 年版プロトコルの判定に渡さず、4 MiB を超えると 400 になるため、本文を自前で読んで `parsedBody` を渡す |
 | `issue_related_delete` | 空本文のとき、ゼロ値の関連課題を返す | 空本文・204 のとき `{"result":"ok"}` | 意味のないゼロ値の JSON を返さない |
@@ -181,3 +181,19 @@ toolset: `space_digest` `document_digest` `activity_digest` `digest_unified` は
 |---|---|---|---|
 | 読み取りツール 55 個(ダウンロード系 2 個を除く)の `inputSchema` | `max_response_tokens` なし | 任意の整数引数 `max_response_tokens`(省略時 50000、0 で無効)を追加。超えたら切り詰めず `response_too_large` | 巨大な応答で AI のコンテキストを溢れさせない最後の安全網。フラグはクライアントが決める(2026-10-28 ユーザー決定)。`ALLOWED_CHANGES` に理由つきで載せ、`tools-list-snapshot.test.ts` が差分を `properties.max_response_tokens` の追加だけに固定している(`timezone` を持つ 9 ツールは両方) |
 | エラーコード | `response_too_large` なし | 追加(retryable: false) | ADR 0004 |
+
+## M07: 全マイルストーンの見直し(ツール数の内訳)
+
+M07 ではツールを足していない。M03〜M06 の差分がこの文書に揃っているかを、ツール数の内訳で突き合わせた。
+
+| マイルストーン | 追加数 | 累計 | この文書の節 |
+|---|---|---|---|
+| M03(読み取りの単純系) | 38 | 38 | スキーマ(tools/list)の差分、振る舞いの差分 |
+| M04(書き込み・破壊的 14 + `project_conventions`) | 15 | 53 | スキーマの差分(`issue_attachment_upload` の 3 か所) |
+| M05A(分析系の加工) | 11 | 64 | M05A |
+| M05B(digest 系 6 + `user_activity`) | 7 | 71 | M05B |
+| M06(公式 MCP 由来) | 3 | 74 | M06 |
+
+- 74 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
+- 全ツールの `tools/list`(description / inputSchema / annotations)は `test/snapshots/tools_list.json` に固定し、logvalet の baseline との差は `ALLOWED_CHANGES` / `ALLOWED_EXTRA` に理由つきで載せたものだけ(`test/helpers/baseline.ts`)。
+- 実機での確認が要る差分(`issue_create` の `priorityId` 省略、未公開 API `relatedIssues`、4 MiB アップロード)は [manual-verification.md](manual-verification.md) の V08・V09・V11。
