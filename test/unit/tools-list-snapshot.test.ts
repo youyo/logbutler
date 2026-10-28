@@ -158,11 +158,12 @@ describe("tools/list スナップショット", () => {
       "document_create",
     ])
       expect(kind(n), n).toBe("WriteNonIdempotent");
+    // star_add は注釈だけ idempotentHint=false(同じ対象に 2 回付けるとスターが 2 個になる)。冪等キャッシュは付けない。
+    expect(kind("star_add")).toBe("WriteNonIdempotent");
     for (const n of [
       "issue_update",
       "issue_comment_update",
       "issue_related_add",
-      "star_add",
       "watching_add",
       "watching_update",
       "watching_mark_as_read",
@@ -219,7 +220,23 @@ describe("tools/list スナップショット", () => {
     ]);
   });
 
-  it("許容した timezone 引数の差分は、9 ツールそれぞれ inputSchema.properties.timezone の追加と max_response_tokens の追加だけ", async () => {
+  it("許容した star_add の差分は annotations.idempotentHint(true → false)だけ", async () => {
+    const result = compareWithBaseline(
+      await listTools(),
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: ["logbutler_star_add"] },
+    );
+    expect(result.changed.flatMap((c) => c.diffs)).toEqual([
+      expect.objectContaining({
+        field: "annotations",
+        path: "idempotentHint",
+        expected: true,
+        actual: false,
+      }),
+    ]);
+  });
+
+  it("許容した timezone 引数の差分は、9 ツールそれぞれ inputSchema.properties.timezone の追加と max_response_tokens の追加だけ(issue_list は status_id の説明文の変更も)", async () => {
     const tools = [
       "issue_list",
       "my_tasks",
@@ -238,7 +255,16 @@ describe("tools/list スナップショット", () => {
     );
     expect(result.changed.map((c) => c.name).sort()).toEqual([...tools].sort());
     for (const c of result.changed) {
-      const diffs = c.diffs.map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }));
+      const diffs = c.diffs
+        .map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }))
+        // issue_list の status_id の説明文は ADR 0012 で変更(許容理由は baseline.ts)
+        .filter(
+          (d) =>
+            !(
+              c.name === "logbutler_issue_list" &&
+              d.path === "inputSchema.properties.status_id.description"
+            ),
+        );
       expect(diffs, c.name).toEqual([
         { path: "inputSchema.properties.max_response_tokens", expected: undefined },
         { path: "inputSchema.properties.timezone", expected: undefined },
@@ -270,7 +296,11 @@ describe("tools/list スナップショット", () => {
     for (const c of result.changed) {
       const paths = c.diffs
         .map((d) => `${d.field}.${d.path}`)
-        .filter((p) => p !== "inputSchema.properties.timezone");
+        .filter(
+          (p) =>
+            p !== "inputSchema.properties.timezone" &&
+            p !== "inputSchema.properties.status_id.description",
+        );
       expect(paths, c.name).toEqual(["inputSchema.properties.max_response_tokens"]);
     }
     expect(result.changed).toHaveLength(55);

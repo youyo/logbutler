@@ -59,3 +59,7 @@ run = [
 [tasks."verify:oauth"]
 description = "実環境の OAuth 確認 (DCR → PKCE → ブラウザ → /token → MCP → refresh)。例: mise run verify:oauth -- https://<domain>/mcp"
 run = "node scripts/verify-oauth/main.ts"
+
+[tasks."test:live"]
+description = "実環境 E2E (デプロイ済み Worker + 実 Backlog に通信。LOGBUTLER_LIVE_PROJECT_KEY 必須。test には含めない。例: LOGBUTLER_LIVE_PROJECT_KEY=LOGBUTLER mise run test:live)"
+run = "pnpm exec vitest run --project live"

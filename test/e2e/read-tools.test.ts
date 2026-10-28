@@ -29,6 +29,15 @@ async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0]) {
 const call = (token: string, name: string, args: Record<string, unknown>) =>
   mcpRequest(token, "tools/call", { name, arguments: args });
 
+/** 完了集合(完了・対応済み・Closed・Done・Resolved)以外に、プロジェクト固有のカスタム状態 101 がある。 */
+const PROJ_STATUSES = [
+  { id: 1, projectId: 10, name: "未対応" },
+  { id: 2, projectId: 10, name: "処理中" },
+  { id: 3, projectId: 10, name: "処理済み" },
+  { id: 4, projectId: 10, name: "完了" },
+  { id: 101, projectId: 10, name: "レビュー待ち" },
+];
+
 describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp で動く", () => {
   it("issue_list: project_key を解決し、フィルターを Backlog のクエリにして、生データ(camelCase)を返す", async () => {
     const issues = [
@@ -36,6 +45,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     ];
     const { token, calls } = await loggedIn({
       [`GET ${API}/projects/PROJ`]: () => jsonResponse({ id: 10, projectKey: "PROJ" }),
+      [`GET ${API}/projects/PROJ/statuses`]: () => jsonResponse(PROJ_STATUSES),
       [`GET ${API}/issues`]: () => jsonResponse(issues),
     });
     const res = await call(token, "logbutler_issue_list", {
@@ -51,15 +61,102 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     const issueCall = calls.find((c) => new URL(c.url).pathname.endsWith("/issues"));
     const q = new URL(issueCall?.url ?? "").searchParams;
     expect(q.getAll("projectId[]")).toEqual(["10"]);
-    expect(q.getAll("statusId[]")).toEqual(["1", "2", "3"]);
+    // not-closed は ID の決め打ちでなく、プロジェクトの状態一覧から完了集合以外の ID(カスタム状態 101 を含む)
+    expect(q.getAll("statusId[]")).toEqual(["1", "2", "3", "101"]);
     expect(q.get("count")).toBe("5");
     // grant の props にある Backlog トークンで呼ぶ(MCP のトークンではない)
     expect(issueCall?.headers.get("authorization")).toMatch(/^Bearer backlog-at-/);
-    // 並列呼び出しなし: プロジェクト解決 → 課題一覧の順
+    // 並列呼び出しなし: プロジェクト解決 → 状態一覧 → 課題一覧の順
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
       "/api/v2/projects/PROJ",
+      "/api/v2/projects/PROJ/statuses",
       "/api/v2/issues",
     ]);
+  });
+
+  it("issue_list(not-closed・プロジェクト指定なし): 参加プロジェクトの状態一覧から、重複を除いた完了集合以外の ID を使う", async () => {
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/projects`]: () =>
+        jsonResponse([
+          { id: 10, projectKey: "PROJ" },
+          { id: 20, projectKey: "OTHER" },
+        ]),
+      [`GET ${API}/projects/PROJ/statuses`]: () => jsonResponse(PROJ_STATUSES),
+      [`GET ${API}/projects/OTHER/statuses`]: () =>
+        jsonResponse([
+          { id: 1, name: "未対応" },
+          { id: 201, name: "検証中" },
+          { id: 202, name: "Closed" },
+        ]),
+      [`GET ${API}/issues`]: () => jsonResponse([]),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_list", { status_id: "not-closed" }),
+    );
+    expect(rpc.result?.isError, firstText(rpc)).toBeFalsy();
+    const issueCall = calls.find((c) => new URL(c.url).pathname.endsWith("/issues"));
+    expect(new URL(issueCall?.url ?? "").searchParams.getAll("statusId[]")).toEqual([
+      "1",
+      "2",
+      "3",
+      "101",
+      "201",
+    ]);
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
+      "/api/v2/projects",
+      "/api/v2/projects/PROJ/statuses",
+      "/api/v2/projects/OTHER/statuses",
+      "/api/v2/issues",
+    ]);
+  });
+
+  it("issue_comment_list: offset は Backlog に送らず、count + offset 件を取って先頭 offset 件を読み飛ばす(実 Backlog は offset に 400 unknownParameter を返す)", async () => {
+    const comments = Array.from({ length: 5 }, (_, i) => ({ id: 50 - i, content: `c${i}` }));
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/issues/PROJ-1/comments`]: (c) =>
+        new URL(c.url).searchParams.has("offset")
+          ? jsonResponse(
+              { errors: [{ message: "unknownParameter", code: 7, moreInfo: "offset" }] },
+              400,
+            )
+          : jsonResponse(comments),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_comment_list", {
+        issue_key: "PROJ-1",
+        count: 2,
+        offset: 3,
+      }),
+    );
+    expect(rpc.result?.isError, firstText(rpc)).toBeFalsy();
+    expect(JSON.parse(firstText(rpc)).map((c: { id: number }) => c.id)).toEqual([47, 46]);
+    expect(new URL(calls[0]?.url ?? "").searchParams.get("count")).toBe("5");
+  });
+
+  it("document_tree: ドキュメントが 0 件のプロジェクト(Backlog が 404 ActiveRoot node not found)は空の木を返し、存在しないプロジェクトは not_found のまま", async () => {
+    const { token } = await loggedIn({
+      [`GET ${API}/documents/tree`]: (c) =>
+        new URL(c.url).searchParams.get("projectIdOrKey") === "EMPTY"
+          ? jsonResponse({ errors: [{ message: "ActiveRoot node not found", code: 6 }] }, 404)
+          : jsonResponse({ errors: [{ message: "No project.", code: 6 }] }, 404),
+      [`GET ${API}/projects/EMPTY`]: () => jsonResponse({ id: 30, projectKey: "EMPTY" }),
+      [`GET ${API}/projects/GONE`]: () =>
+        jsonResponse({ errors: [{ message: "No project.", code: 6 }] }, 404),
+    });
+    const empty = await readRpc(
+      await call(token, "logbutler_document_tree", { project_key: "EMPTY" }),
+    );
+    expect(empty.result?.isError, firstText(empty)).toBeFalsy();
+    expect(JSON.parse(firstText(empty))).toEqual({
+      projectId: 30,
+      activeTree: { id: "Active", children: [] },
+      trashTree: { id: "Trash", children: [] },
+    });
+    const gone = await readRpc(
+      await call(token, "logbutler_document_tree", { project_key: "GONE" }),
+    );
+    expect(gone.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(gone)).error.code).toBe("not_found");
   });
 
   it("wiki_get: GET /wikis/{id} の生データを返し、Backlog の 404 は §9 エンベロープになる", async () => {

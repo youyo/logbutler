@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BacklogApiError } from "../../backlog/client";
 import {
   nonEmpty,
   optInt,
@@ -53,9 +54,30 @@ export const documentTree = defineTool({
   category: "ReadOnly",
   toolset: "document",
   inputSchema: z.object({ project_key: reqStr("Project key") }),
-  handler: ({ project_key }, { client }) =>
-    client.request("GET", "/documents/tree", { query: { projectIdOrKey: project_key } }),
+  handler: async ({ project_key }, { client }) => {
+    try {
+      return await client.request("GET", "/documents/tree", {
+        query: { projectIdOrKey: project_key },
+      });
+    } catch (e) {
+      // ドキュメントが 0 件のプロジェクトでは、実 Backlog が 404 "ActiveRoot node not found" を返す。
+      // 空の木にする。projectId は GET /projects/{key} で補う(存在しないプロジェクトならここで not_found)。
+      if (isEmptyDocumentTree(e)) {
+        return {
+          projectId: await resolveProjectId(client, project_key),
+          activeTree: { id: "Active", children: [] },
+          trashTree: { id: "Trash", children: [] },
+        };
+      }
+      throw e;
+    }
+  },
 });
+
+const isEmptyDocumentTree = (e: unknown): boolean =>
+  e instanceof BacklogApiError &&
+  e.status === 404 &&
+  (e.backlogMessage ?? "").includes("ActiveRoot node not found");
 
 export const documentCreate = defineTool({
   name: "logbutler_document_create",

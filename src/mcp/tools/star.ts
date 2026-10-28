@@ -17,6 +17,9 @@ export const starAdd = defineTool({
   description:
     "Add a star to an issue, comment, wiki, pull request, or pull request comment. Specify exactly one of: issue_id, comment_id, wiki_id, pull_request_id, pull_request_comment_id",
   category: "WriteIdempotent",
+  // 実 Backlog は同じ対象に 2 回付けるとスターが 2 個になる。冪等ではないので注釈だけ false にする
+  // (冪等キャッシュは付けない。logvalet との差分は docs/tool-diff-from-logvalet.md)。
+  idempotentHint: false,
   toolset: "star",
   inputSchema: z.object({
     issue_id: optInt("Issue ID to star"),

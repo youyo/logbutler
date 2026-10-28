@@ -207,6 +207,18 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
     reason:
       "file_paths（サーバー上のファイルパス）は Workers にファイルシステムがないためスキーマから削除し、base64 のみにした（M04 の決定済み事項）。説明文と file_content_base64 の説明から file_paths への言及も除いた。差分の範囲は test/unit/tools-list-snapshot.test.ts で固定している。",
   },
+  {
+    tool: "logbutler_star_add",
+    fields: ["annotations"],
+    reason:
+      "idempotentHint を true から false に変更。実 Backlog は同じ対象に 2 回スターを付けると 2 個になる(2026-10-29 実環境 E2E で確認)ので、冪等とは言えない。カテゴリは WriteIdempotent のまま(冪等キャッシュは付けない)で、注釈だけを実態に合わせた。差分の範囲は test/unit/tools-list-snapshot.test.ts で annotations.idempotentHint だけに固定している。",
+  },
+  {
+    tool: "logbutler_issue_list",
+    fields: ["inputSchema"],
+    reason:
+      "status_id の説明文を変更。logvalet は not-closed を「ID 1,2,3」と説明していたが、Logbutler はプロジェクトの状態一覧から完了集合以外の状態(カスタム状態を含む)の ID を決めるので、説明を実態に合わせた(ADR 0012)。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.status_id.description だけに固定している。timezone / max_response_tokens の追加は別の許容項目。",
+  },
   ...[
     "logbutler_issue_list",
     "logbutler_my_tasks",

@@ -36,36 +36,77 @@ describe("issue(単純な取得)", () => {
     expect(Object.keys(run.json)).not.toContain("issue_key");
   });
 
-  it("issue_comment_list: count / offset(0 以下は送らない)", async () => {
-    const comments = [
-      {
-        id: 1,
-        content: "c",
-        changeLog: [],
-        createdUser: { id: 1 },
-        created: "t",
-        updated: "t",
-        stars: [],
-        notifications: [],
-      },
-    ];
-    await expectTool({
-      tool: "logbutler_issue_comment_list",
-      args: { issue_key: "PROJ-1" },
-      respond: { "GET /issues/PROJ-1/comments": comments },
-      calls: ["GET /issues/PROJ-1/comments"],
+  describe("issue_comment_list(コメント一覧 API は minId / maxId / count / order のみ。offset は Backlog に送らない)", () => {
+    const comment = (id: number) => ({
+      id,
+      content: `c${id}`,
+      changeLog: [],
+      createdUser: { id: 1 },
+      created: "t",
+      updated: "t",
+      stars: [],
+      notifications: [],
     });
-    await expectTool({
-      tool: "logbutler_issue_comment_list",
-      args: { issue_key: "PROJ-1", count: 50, offset: 10 },
-      respond: { "GET /issues/PROJ-1/comments": comments },
-      calls: ["GET /issues/PROJ-1/comments?count=50&offset=10"],
+    const many = (n: number) => Array.from({ length: n }, (_, i) => comment(100 - i)); // 新しい順(既定の desc)
+    const run = (args: Record<string, unknown>, respond: Parameters<typeof callTool>[2]) =>
+      callTool("logbutler_issue_comment_list", { issue_key: "PROJ-1", ...args }, respond);
+
+    it("引数なし・count だけ・0 以下は offset なし: count だけ送る(0 以下は送らない)", async () => {
+      await expectTool({
+        tool: "logbutler_issue_comment_list",
+        args: { issue_key: "PROJ-1" },
+        respond: { "GET /issues/PROJ-1/comments": [comment(1)] },
+        calls: ["GET /issues/PROJ-1/comments"],
+      });
+      await expectTool({
+        tool: "logbutler_issue_comment_list",
+        args: { issue_key: "PROJ-1", count: 50 },
+        respond: { "GET /issues/PROJ-1/comments": [comment(1)] },
+        calls: ["GET /issues/PROJ-1/comments?count=50"],
+      });
+      await expectTool({
+        tool: "logbutler_issue_comment_list",
+        args: { issue_key: "PROJ-1", count: 0, offset: 0 },
+        respond: { "GET /issues/PROJ-1/comments": [comment(1)] },
+        calls: ["GET /issues/PROJ-1/comments"],
+      });
     });
-    await expectTool({
-      tool: "logbutler_issue_comment_list",
-      args: { issue_key: "PROJ-1", count: 0, offset: 0 },
-      respond: { "GET /issues/PROJ-1/comments": comments },
-      calls: ["GET /issues/PROJ-1/comments"],
+
+    it("offset あり: count + offset 件を取り、先頭 offset 件を読み飛ばす(offset は送らない)", async () => {
+      const r = await run({ count: 5, offset: 3 }, { "GET /issues/PROJ-1/comments": many(8) });
+      expect(r.isError, r.text).toBe(false);
+      expect(r.calls).toEqual(["GET /issues/PROJ-1/comments?count=8"]);
+      expect(r.json.map((c: { id: number }) => c.id)).toEqual([97, 96, 95, 94, 93]);
+    });
+
+    it("offset だけ: count は Backlog の既定(20)として count = 20 + offset を取る", async () => {
+      const r = await run({ offset: 2 }, { "GET /issues/PROJ-1/comments": many(22) });
+      expect(r.calls).toEqual(["GET /issues/PROJ-1/comments?count=22"]);
+      expect(r.json).toHaveLength(20);
+      expect(r.json[0].id).toBe(98);
+    });
+
+    it("offset がコメント数以上なら空配列", async () => {
+      const r = await run({ count: 5, offset: 10 }, { "GET /issues/PROJ-1/comments": many(4) });
+      expect(r.isError, r.text).toBe(false);
+      expect(r.json).toEqual([]);
+    });
+
+    it("count + offset がちょうど 100 は通り、101 以上は argument_error(Backlog を呼ばない)", async () => {
+      const ok = await run(
+        { count: 90, offset: 10, max_response_tokens: 0 },
+        { "GET /issues/PROJ-1/comments": many(100) },
+      );
+      expect(ok.isError, ok.text).toBe(false);
+      expect(ok.calls).toEqual(["GET /issues/PROJ-1/comments?count=100"]);
+      expect(ok.json).toHaveLength(90);
+
+      for (const args of [{ count: 91, offset: 10 }, { offset: 81 }]) {
+        const r = await run(args, {});
+        expect(r.isError).toBe(true);
+        expect(r.json.error.code).toBe("argument_error");
+        expect(r.calls).toEqual([]);
+      }
     });
   });
 
@@ -249,13 +290,7 @@ describe("issue_list", () => {
     expect(bad.json.error.message).toContain("assignee_id");
   });
 
-  it("status_id: not-closed は 1,2,3、CSV はそのまま", async () => {
-    await expectTool({
-      tool: "logbutler_issue_list",
-      args: { status_id: "not-closed" },
-      respond: { "GET /issues": [] },
-      calls: ["GET /issues?statusId[]=1&statusId[]=2&statusId[]=3"],
-    });
+  it("status_id: CSV はそのまま(状態一覧は引かない)。数値でも not-closed でもなければ argument_error", async () => {
     await expectTool({
       tool: "logbutler_issue_list",
       args: { status_id: "2, 4" },
@@ -264,6 +299,155 @@ describe("issue_list", () => {
     });
     const bad = await callTool("logbutler_issue_list", { status_id: "open" }, {});
     expect(bad.json.error.code).toBe("argument_error");
+  });
+
+  describe("status_id=not-closed(完了集合以外のすべての状態。ID を決め打ちしない)", () => {
+    const st = (id: number, name: string) => ({ id, projectId: 10, name });
+    const standard = [st(1, "未対応"), st(2, "処理中"), st(3, "処理済み"), st(4, "完了")];
+
+    it("project_key あり: 対象プロジェクトの状態一覧から完了集合以外の ID を使う(カスタム状態も入る)", async () => {
+      await expectTool({
+        tool: "logbutler_issue_list",
+        args: { project_key: "PROJ", status_id: "not-closed" },
+        respond: {
+          "GET /projects/PROJ": { id: 10 },
+          "GET /projects/PROJ/statuses": [...standard, st(101, "レビュー待ち")],
+          "GET /issues": [],
+        },
+        calls: [
+          "GET /projects/PROJ",
+          "GET /projects/PROJ/statuses",
+          "GET /issues?projectId[]=10&statusId[]=1&statusId[]=2&statusId[]=3&statusId[]=101",
+        ],
+      });
+    });
+
+    it("完了集合の名前(完了 / 対応済み / Closed / Done / Resolved)は ID が何であっても除く。ID が別名のカスタム状態なら残す", async () => {
+      await expectTool({
+        tool: "logbutler_issue_list",
+        args: { project_key: "PROJ", status_id: "not-closed" },
+        respond: {
+          "GET /projects/PROJ": { id: 10 },
+          "GET /projects/PROJ/statuses": [
+            st(7, "対応済み"),
+            st(8, "Closed"),
+            st(9, "Done"),
+            st(10, "Resolved"),
+            st(11, "完了"),
+            st(4, "保留"), // ID 4 でも名前が完了集合でなければ未完了
+          ],
+          "GET /issues": [],
+        },
+        calls: [
+          "GET /projects/PROJ",
+          "GET /projects/PROJ/statuses",
+          "GET /issues?projectId[]=10&statusId[]=4",
+        ],
+      });
+    });
+
+    it("複数プロジェクト: 状態一覧を 1 件ずつ引き、ID の重複は 1 つにまとめる", async () => {
+      await expectTool({
+        tool: "logbutler_issue_list",
+        args: { project_keys: "A,B", status_id: "not-closed" },
+        respond: {
+          "GET /projects/A": { id: 1 },
+          "GET /projects/B": { id: 2 },
+          "GET /projects/A/statuses": [st(1, "未対応"), st(4, "完了")],
+          "GET /projects/B/statuses": [st(1, "未対応"), st(201, "検証中")],
+          "GET /issues": [],
+        },
+        calls: [
+          "GET /projects/A",
+          "GET /projects/B",
+          "GET /projects/A/statuses",
+          "GET /projects/B/statuses",
+          "GET /issues?projectId[]=1&projectId[]=2&statusId[]=1&statusId[]=201",
+        ],
+      });
+    });
+
+    it("プロジェクト指定なし: GET /projects(アーカイブ除く)の各プロジェクトの状態一覧を使う", async () => {
+      await expectTool({
+        tool: "logbutler_issue_list",
+        args: { status_id: "not-closed" },
+        respond: {
+          "GET /projects": [
+            { id: 10, projectKey: "PROJ" },
+            { id: 20, projectKey: "OTHER" },
+          ],
+          "GET /projects/PROJ/statuses": standard,
+          "GET /projects/OTHER/statuses": [st(1, "未対応"), st(301, "検証中")],
+          "GET /issues": [],
+        },
+        calls: [
+          "GET /projects?archived=false",
+          "GET /projects/PROJ/statuses",
+          "GET /projects/OTHER/statuses",
+          "GET /issues?statusId[]=1&statusId[]=2&statusId[]=3&statusId[]=301",
+        ],
+      });
+    });
+
+    it("プロジェクトが 20 を超える(指定なし)と argument_error(project_key で絞るよう促す)。課題一覧は呼ばない", async () => {
+      const projects = Array.from({ length: 21 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+      const run = await callTool(
+        "logbutler_issue_list",
+        { status_id: "not-closed" },
+        { "GET /projects": projects },
+      );
+      expect(run.isError).toBe(true);
+      expect(run.json.error.code).toBe("argument_error");
+      expect(run.json.error.message).toContain("project_key");
+      expect(run.calls).toEqual(["GET /projects?archived=false"]);
+    });
+
+    it("project_keys が 20 を超えると Backlog を呼ぶ前に argument_error", async () => {
+      const keys = Array.from({ length: 21 }, (_, i) => `P${i}`).join(",");
+      const run = await callTool(
+        "logbutler_issue_list",
+        { project_keys: keys, status_id: "not-closed" },
+        {},
+      );
+      expect(run.json.error.code).toBe("argument_error");
+      expect(run.calls).toEqual([]);
+    });
+
+    it("未完了の状態が 1 つもない(参加プロジェクトなし・全状態が完了集合)なら、課題一覧を呼ばず空配列", async () => {
+      const none = await callTool(
+        "logbutler_issue_list",
+        { status_id: "not-closed" },
+        { "GET /projects": [] },
+      );
+      expect(none.json).toEqual([]);
+      expect(none.calls).toEqual(["GET /projects?archived=false"]);
+      const allDone = await callTool(
+        "logbutler_issue_list",
+        { project_key: "PROJ", status_id: "not-closed" },
+        {
+          "GET /projects/PROJ": { id: 10 },
+          "GET /projects/PROJ/statuses": [st(4, "完了")],
+        },
+      );
+      expect(allDone.json).toEqual([]);
+      expect(allDone.calls).toEqual(["GET /projects/PROJ", "GET /projects/PROJ/statuses"]);
+    });
+
+    it("状態一覧の取得に失敗したらツールエラー(黙って ID を決め打ちしない)", async () => {
+      const run = await callTool(
+        "logbutler_issue_list",
+        { project_key: "PROJ", status_id: "not-closed" },
+        {
+          "GET /projects/PROJ": { id: 10 },
+          "GET /projects/PROJ/statuses": new Response(
+            JSON.stringify({ errors: [{ message: "x", code: 11 }] }),
+            { status: 403 },
+          ),
+        },
+      );
+      expect(run.isError).toBe(true);
+      expect(run.json.error.code).toBe("permission_error");
+    });
   });
 
   it("keyword / sort / order / count / offset", async () => {

@@ -123,7 +123,7 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 目的: logvalet は未指定でも `priorityId=0` を送るが、Logbutler は未指定なら送らない。Backlog が省略を許すか(既定の「中」になるか、エラーか)。
 - 手順(**検証用プロジェクト**で): 先に `logbutler_meta_issue_types` で `issue_type_id` を調べ、`logbutler_issue_create` を `project_key` / `summary` / `issue_type_id` だけで呼ぶ。続けて `priority_id` を `0` で呼ぶ。作った課題は検証後に Backlog 側で削除する。
 - 期待結果: 省略で作成でき、優先度が既定(中)になる。エラーなら、そのメッセージを記録し tool-diff を更新する(必要なら既定の `priorityId` を補う)。
-- 結果: 省略 [ 作成できた(優先度: )/ エラー: ] ／ 0 を明示 [ ] ／ 判定 [ OK / NG ] ／ メモ:
+- 結果(2026-10-29): 省略 [ エラー: `HTTP 400, code=7: error.invalid : priorityId` ] ／ 0 を明示 [ 同エラー ] ／ 3 を明示 [ 作成できた(優先度: 中) ] ／ 判定 [ NG → 修正済み ] ／ メモ: 省略時は `GET /priorities` から既定値(id 3 があれば 3、なければ中央)を決めて送るよう修正(優先度 ID は公式に固定とは明記されていないので決め打ちしない)。明示値は 0 も含めそのまま送り、Backlog に検証を任せる。
 
 ### V09 未公開 API(`/issues/{key}/relatedIssues`)の実際の応答
 
@@ -236,6 +236,18 @@ Logbutler の前段に Cloudflare MCP Server Portals を置く場合だけ実施
 - 結果: Managed OAuth [ 無効 / 有効(要修正)] ／ メモ:
 
 ---
+
+## 名前の長さ上限(実測)
+
+Backlog の公式 docs に記載がない上限を、2026-10-29 に実 Backlog で 1 文字ずつ確認した値。超えると `HTTP 400 code=7 error.maxLength : name`。
+
+| 対象 | 上限(文字) |
+|---|---|
+| カテゴリー名 | 40 |
+| バージョン/マイルストーン名 | 40 |
+| 状態名 | 20 |
+
+Logbutler 本体(src)は長さを検証せず、Backlog の応答(`api_error` として返る)に任せる(上限が docs になく変わりうるため。ADR 0013)。`test/live/` の作成物の名前は `NAME_MARK`(`lv` + HHMMSS)で上限内に収めている(`test/live/helpers/live.ts` の `NAME_LIMITS`、`test/node/live-names.test.ts`)。
 
 ## 一覧(ADR との対応)
 

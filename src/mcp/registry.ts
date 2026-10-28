@@ -104,6 +104,11 @@ export interface ToolDefinitionInput<S extends z.ZodObject> {
   title: string;
   description: string;
   category: ToolCategory;
+  /**
+   * 注釈の idempotentHint をカテゴリの既定から上書きする。冪等キャッシュ(WriteNonIdempotent)は付けずに、
+   * 注釈だけを実態に合わせたいとき用(例: star_add は同じ対象に 2 回付けるとスターが 2 個になる)。
+   */
+  idempotentHint?: boolean;
   toolset: Toolset;
   inputSchema: S;
   /**
@@ -152,7 +157,10 @@ export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>)
       : input.inputSchema,
     responseLimit,
     ...(input.maxApiCalls === undefined ? {} : { maxApiCalls: input.maxApiCalls }),
-    annotations: annotationsFor(input.category, input.title),
+    annotations: {
+      ...annotationsFor(input.category, input.title),
+      ...(input.idempotentHint === undefined ? {} : { idempotentHint: input.idempotentHint }),
+    },
     handler: (args, ctx) => input.handler(args as z.infer<S>, ctx),
   };
 }

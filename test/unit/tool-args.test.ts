@@ -85,8 +85,8 @@ describe("parseDate", () => {
 });
 
 describe("resolveStatusIds", () => {
-  it("not-closed は [1,2,3]、数値の CSV はそのまま", () => {
-    expect(resolveStatusIds("not-closed")).toEqual([1, 2, 3]);
+  it("not-closed は ID に展開せずそのまま返す(ID はプロジェクトの状態一覧から決める)、数値の CSV は数値にする", () => {
+    expect(resolveStatusIds("not-closed")).toBe("not-closed");
     expect(resolveStatusIds("4, 5")).toEqual([4, 5]);
   });
   it("それ以外・空は argument_error", () => {

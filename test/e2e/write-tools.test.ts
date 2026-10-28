@@ -41,6 +41,12 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     const created = { id: 500, issueKey: "PROJ-9", summary: "新規" };
     const { token, calls } = await loggedIn({
       [`GET ${API}/projects/PROJ`]: () => jsonResponse({ id: 10, projectKey: "PROJ" }),
+      [`GET ${API}/priorities`]: () =>
+        jsonResponse([
+          { id: 10, name: "High" },
+          { id: 11, name: "Normal" },
+          { id: 12, name: "Low" },
+        ]),
       [`POST ${API}/issues`]: () => jsonResponse(created),
     });
     const args = { project_key: "PROJ", summary: "新規", issue_type_id: 2, category_ids: "3,4" };
@@ -56,7 +62,9 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     expect(form.get("summary")).toBe("新規");
     expect(form.get("issueTypeId")).toBe("2");
     expect(form.getAll("categoryId[]")).toEqual(["3", "4"]);
-    expect(form.has("priorityId")).toBe(false);
+    // priority_id 省略時は GET /priorities の一覧(スペースごとに ID が違いうる)から既定値を決めて送る。priorityId なしは Backlog が error.invalid で拒否する(V08)
+    expect(paths(calls)).toContain("GET /priorities");
+    expect(form.get("priorityId")).toBe("11");
 
     const again = await readRpc(await call(token, "logbutler_issue_create", args));
     expect(firstText(again)).toBe(firstText(first));
@@ -74,7 +82,7 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
       [`GET ${API}/projects/PROJ`]: () => jsonResponse({ id: 10 }),
       [`POST ${API}/issues`]: () => jsonResponse({ id: 501, issueKey: "PROJ-10" }),
     });
-    const base = { project_key: "PROJ", issue_type_id: 2 };
+    const base = { project_key: "PROJ", issue_type_id: 2, priority_id: 3 };
     const meta = { idempotency_key: "e2e-req-1" };
     const a = await readRpc(
       await call(token, "logbutler_issue_create", { ...base, summary: "A" }, meta),
@@ -127,6 +135,45 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     expect(paths(calls)).toEqual(["POST /space/attachment", "PATCH /issues/PROJ-1"]);
   });
 
+  it("issue_attachment_upload: 0 バイトのファイルは Backlog に送らず argument_error", async () => {
+    const { token, calls } = await loggedIn({});
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_attachment_upload", {
+        issue_key: "PROJ-1",
+        file_name: "empty.txt",
+        file_content_base64: "",
+      }),
+    );
+    expect(rpc.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(rpc)).error.code).toBe("argument_error");
+    expect(calls).toHaveLength(0);
+  });
+
+  it('issue_update: 現在と同じ値だけの更新(Backlog が 400 "No comment content.")は、課題を GET して成功として返す', async () => {
+    const current = { id: 1, issueKey: "PROJ-1", description: "same" };
+    const { token, calls } = await loggedIn({
+      [`PATCH ${API}/issues/PROJ-1`]: () =>
+        jsonResponse({ errors: [{ message: "No comment content.", code: 7 }] }, 400),
+      [`GET ${API}/issues/PROJ-1`]: () => jsonResponse(current),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_update", { issue_key: "PROJ-1", description: "same" }),
+    );
+    expect(rpc.result?.isError, firstText(rpc)).toBeFalsy();
+    expect(JSON.parse(firstText(rpc))).toEqual(current);
+    expect(paths(calls)).toEqual(["PATCH /issues/PROJ-1", "GET /issues/PROJ-1"]);
+  });
+
+  it("star_add: tools/list の注釈は idempotentHint=false(同じ対象に 2 回付けるとスターが 2 個になる)", async () => {
+    const { token } = await loggedIn({});
+    const res = await mcpRequest(token, "tools/list", {});
+    const rpc = await readRpc(res);
+    const tool = (rpc.result?.tools ?? []).find(
+      (t: { name: string }) => t.name === "logbutler_star_add",
+    ) as { annotations: Record<string, unknown> } | undefined;
+    expect(tool?.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
+  });
+
   it("watching_delete: DELETE /watchings/{id} を呼び、削除されたウォッチを返す", async () => {
     const deleted = { id: 5, resourceAlreadyRead: false, type: "issue" };
     const { token, calls } = await loggedIn({
@@ -146,7 +193,7 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
           ? jsonResponse({ errors: [{ message: "busy", code: 1 }] }, 503)
           : jsonResponse({ id: 502, issueKey: "PROJ-11" }),
     });
-    const args = { project_key: "PROJ", summary: "retry", issue_type_id: 2 };
+    const args = { project_key: "PROJ", summary: "retry", issue_type_id: 2, priority_id: 3 };
     const first = await readRpc(await call(token, "logbutler_issue_create", args));
     expect(first.result?.isError).toBe(true);
     const second = await readRpc(await call(token, "logbutler_issue_create", args));

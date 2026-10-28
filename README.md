@@ -87,6 +87,7 @@ mise run deploy:check   # ダミー値でデプロイ設定を生成して dry-r
 mise run deploy:render  # LOGBUTLER_* からデプロイ用設定(wrangler.deploy.jsonc)を生成
 mise run deploy         # 生成してデプロイ(実行はユーザー。下流のデプロイは GitHub Actions。手順は docs/runbook.md)
 mise run verify:oauth -- https://<domain>/mcp   # 実環境の OAuth 確認(下記)
+LOGBUTLER_LIVE_PROJECT_KEY=<KEY> mise run test:live   # 実環境 E2E(デプロイ済み Worker + 実 Backlog。test には含めない。下記)
 mise run dev            # wrangler dev
 ```
 
@@ -155,3 +156,18 @@ mise run verify:oauth -- https://<domain>/mcp --refresh-only                    
 
 M01〜M07 まで実装済み。**実デプロイはまだしていない**。デプロイできる状態の設定・手順・確認リストを用意してあり、
 Backlog のリフレッシュトークンのローテーション有無、KV の結果整合性の影響、Portal 経由の挙動などは未検証で、[docs/manual-verification.md](docs/manual-verification.md) に集約している。
+
+## 実環境 E2E(`mise run test:live`)
+
+デプロイ済みの Worker(`verify:oauth` が保存した状態ファイルの `mcpUrl`)と**実 Backlog**に対して、全ツールを呼ぶスイート(`test/live/`)。unit / e2e が Backlog をモックしているため見つからない、実 Backlog の仕様との食い違いを探す。`mise run test` と CI には含めない。
+
+```bash
+mise run verify:oauth -- https://<domain>/mcp   # 先に認証して状態ファイルを保存する
+LOGBUTLER_LIVE_PROJECT_KEY=<書き込んでよいテスト用プロジェクトのキー> mise run test:live
+```
+
+- `LOGBUTLER_LIVE_PROJECT_KEY`(必須。未設定ならスイート全体が失敗する)。書き込みはこのプロジェクト内の、スイートが作った課題・ドキュメントにだけ行う(summary に `[live <実行時刻>]`)。
+- `LOGBUTLER_LIVE_STATE_FILE`(既定 `.verify-oauth.local.json`)。リフレッシュトークンは接続時に更新し、ローテーション後の値を同じファイルへ 0600 で書き戻す。実際の MCP クライアントと同じく、`/mcp` が 401 を返したら 1 回だけ更新して再試行する(2 回目も 401 ならエラー)。
+- 状態・プロジェクト設定(状態名・課題種別・優先度など)は実行時に `logbutler_meta_*` などで取得し、ID を決め打ちしない。
+- 課題・ドキュメントは削除しない(削除するツールがないため)。プロジェクト設定(カテゴリー・バージョン・状態・カスタム属性)は、スイートが `[live <実行時刻>]` つきで作ったものだけを追加 → 更新 → 削除し、失敗時も `afterAll` で消す。**Backlog の管理者権限が必要**。1 回の実行でおよそ 400 リクエスト。
+- 対象外: 共有ファイル系(2FA 設定時に別パスワードが必要)と Wiki 系(このスペースで有効化できない)。

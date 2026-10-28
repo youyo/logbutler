@@ -10,7 +10,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - 完了条件は `mise run test`(unit + e2e)と `mise run lint` が通ること。
 - **Durable Objects / McpAgent は使わない**。MCP はステートレス(`createMcpHandler`)。
 - **Backlog のトークンは grant の `props` にだけ置く**。ログ・エラーメッセージ・別の KV キー・MCP の応答に出さない。
-- **Backlog API はモックのみ**。unit / e2e テストで実 Backlog に通信しない(`test/helpers/mock-fetch.ts` は未登録の宛先への通信を例外にする)。
+- **Backlog API はモックのみ**。unit / e2e テストで実 Backlog に通信しない(`test/helpers/mock-fetch.ts` は未登録の宛先への通信を例外にする)。**例外は `mise run test:live`(`test/live/`)だけ**で、デプロイ済み Worker と実 Backlog に通信し、`LOGBUTLER_LIVE_PROJECT_KEY` のプロジェクトに書き込む。`mise run test` / CI には含めず、ユーザーの許可があるときだけ実行する。トークンは出力・エラーに出さない。
 - 依存は公開から 2 週間以上たった正確なバージョンに固定する(`^` `~` を使わない)。`wrangler.jsonc` の `compatibility_date` も、固定した workerd が対応する日付まで。
 - コミット・push・PR・リモート作成・デプロイは、ユーザーの指示があるときだけ。
 
@@ -28,6 +28,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - **upstream / 下流モデル**(ADR 0011): このリポジトリは upstream で、`wrangler.jsonc` はローカル開発・テスト用のダミー値の共有設定(`env` ブロックなし)。アカウント固有の値(Worker 名・KV id・ドメイン・Backlog スペース・client id/secret)は**追跡ファイルに書かない**。デプロイは `mise run deploy:render` が `LOGBUTLER_*` 環境変数から gitignore 済みの `wrangler.deploy.jsonc` を生成し、`wrangler deploy -c` する(`mise.local.toml` の `[env]` / GitHub の Variables)。`wrangler.jsonc` のトップレベル(`compatibility_date` など)を変えれば下流に pull で届く。生成項目を足したら `scripts/render-wrangler-config/core.ts`・unit・E2E・runbook を更新する。
 - GitHub Actions は**コミット SHA で固定**する(`.github/workflows/ci.yml`)。更新時は `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で実在を確かめる。
 - ツール名の接頭辞は `logbutler_`。
+- **状態・設定の ID を決め打ちしない**(ADR 0012)。テストも `meta_*` で取得するか、`project_settings` のツールでスイート自身が作る(実環境 E2E は名前に `[live <時刻>]` を付け、`afterAll` で必ず消す)。
 
 ## 構成
 
@@ -49,6 +50,7 @@ scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oaut
 .github/workflows/deploy.yml 下流のデプロイ(Variable LOGBUTLER_WORKER_NAME が空の upstream では飛ばす)
 scripts/render-wrangler-config/  wrangler.jsonc + LOGBUTLER_* → wrangler.deploy.jsonc(core.ts: JSONC 読み・検証・差し替え。main.ts: 入出力。Node 24 の型ストリップで直接実行)
 docs/runbook.md  docs/manual-verification.md   デプロイ・運用の手順書と、未検証の前提の実機確認リスト(ADR の「未検証の前提」から V01〜 / P1〜 でリンクしている)
+src/analysis/open-statuses.ts   「未完了」の状態 ID をプロジェクトの状態一覧(完了集合以外)から決める(ADR 0012。状態 ID を決め打ちしない)
 src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)・activity-range.ts(期間つきのアクティビティ取得。maxId を必ず進める)・snippet.ts(コードポイント単位の抜粋)と、ツールごとの関数(digest 系は DigestEnvelope)
 src/backlog/client.ts         Backlog API クライアント(request / download。本文の読み取りも同じ期限)
 test/unit/  test/e2e/  test/helpers/(tool-call.ts: 実クライアント + モック fetch でツールを呼ぶ)  test/fixtures/(logvalet の tools/list baseline。コピー元は README)  test/snapshots/(tools/list のスナップショット)

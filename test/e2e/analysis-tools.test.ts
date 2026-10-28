@@ -93,13 +93,20 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     expect(calls[0]?.headers.get("authorization")).toMatch(/^Bearer backlog-at-/);
   });
 
-  it("my_tasks: GetMyself → overdue → upcoming → watching。重複は overdue 優先、日付は timezone 引数(既定 Asia/Tokyo)の暦日", async () => {
+  it("my_tasks: GetMyself → プロジェクト一覧 → 状態一覧 → overdue → upcoming → watching。重複は overdue 優先、日付は timezone 引数(既定 Asia/Tokyo)の暦日。未完了は完了集合以外の状態(カスタム状態を含む)", async () => {
     const overdueOnly = issue({ key: "PROJ-1", dueDate: "2026-10-25T00:00:00Z" });
     const both = issue({ key: "PROJ-2", dueDate: "2026-10-27T00:00:00Z" });
     const upcomingOnly = issue({ key: "PROJ-3", dueDate: "2026-10-30T00:00:00Z" });
     let issueCalls = 0;
     const { token, calls } = await loggedIn({
       [`GET ${API}/users/myself`]: () => jsonResponse({ id: 1, userId: "a", name: "Alice" }),
+      [`GET ${API}/projects`]: () => jsonResponse([{ id: 10, projectKey: "PROJ" }]),
+      [`GET ${API}/projects/PROJ/statuses`]: () =>
+        jsonResponse([
+          { id: 1, projectId: 10, name: "未対応" },
+          { id: 4, projectId: 10, name: "完了" },
+          { id: 101, projectId: 10, name: "レビュー待ち" },
+        ]),
       [`GET ${API}/issues`]: () =>
         jsonResponse(issueCalls++ === 0 ? [overdueOnly, both] : [both, upcomingOnly]),
       [`GET ${API}/users/1/watchings`]: () =>
@@ -127,11 +134,16 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     });
     expect(calls.map((c) => pathOf(c.url))).toEqual([
       "/users/myself",
+      "/projects",
+      "/projects/PROJ/statuses",
       "/issues",
       "/issues",
       "/users/1/watchings",
     ]);
-    expect(new URL(calls[1]?.url ?? "").searchParams.get("dueDateUntil")).toBe("2026-10-27");
+    const overdueQuery = new URL(calls[3]?.url ?? "").searchParams;
+    expect(overdueQuery.get("dueDateUntil")).toBe("2026-10-27");
+    // 未完了 = 完了集合(完了)以外。ID 1,2,3 の決め打ちではなく、カスタム状態 101 も入る。
+    expect(overdueQuery.getAll("statusId[]")).toEqual(["1", "101"]);
   });
 
   it("ツールごとの maxApiCalls が実際の /mcp で効く: issue_stale は 5 プロジェクトが上限まで続いても 55 回で止まる", async () => {

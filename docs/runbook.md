@@ -124,14 +124,19 @@ mise run verify:oauth -- https://<domain>/mcp           # OAuth の通し確認(
 
 `/healthz` が 503 なら、本文の `missing` / `invalid` が直すべき項目(ADR 0010)。`verify:oauth` の使い方は [README](../README.md#実環境の-oauth-確認mise-run-verifyoauth)、続きの確認は [docs/manual-verification.md](manual-verification.md)。
 
-### 2-5. secrets の投入
+### デプロイ後の実 Backlog 確認(`mise run test:live`、任意)
 
-```sh
-pnpm exec wrangler secret put BACKLOG_CLIENT_ID --env production
-pnpm exec wrangler secret put BACKLOG_CLIENT_SECRET --env production
+デプロイ済みの Worker と実 Backlog に対して全ツールを呼ぶスイート(`test/live/`)。`mise run test` と CI には含まれない。実 Backlog に書き込むので、**テスト用のプロジェクトを用意して**から実行する。
+
+```bash
+mise run verify:oauth -- https://<domain>/mcp                                  # 先に認証して状態ファイルを保存する
+LOGBUTLER_LIVE_PROJECT_KEY=<テスト用プロジェクトのキー> mise run test:live
 ```
 
-プロンプトに値を貼る(コマンドラインに値を書かない)。投入後に `/healthz` が 200 になることを 2-6 で確認する。
+- 書き込むのはそのプロジェクトの中だけ。課題・ドキュメントは名前に `[live <実行時刻>]` が付き、削除できないので残る。プロジェクト設定(カテゴリー・バージョン・状態・カスタム属性)はスイートが作ったものだけを追加・更新・削除し、失敗しても最後に消す(消せなかったときは `afterAll` の失敗として名前が出るので、手動で消す)。
+- **`project_settings` のツールを確かめるため、認証したユーザーに、そのプロジェクトの管理者権限が必要**(状態の追加は管理者、カスタム属性は管理者かプロジェクト管理者。カテゴリー・バージョンも「全権限」)。権限がないと該当テストが `permission_error` で失敗する。
+- プロジェクトの状態には、完了集合(完了 / 対応済み / Closed / Done / Resolved)に入るものと入らないものが各 1 つ以上必要。カスタム状態は、スイートが `status_add` で作る(8 個の上限に空きが 1 つ要る)。
+- 詳細(環境変数・リクエスト数・対象外)は [README](../README.md#実環境-e2emise-run-testlive)。
 
 ### 予備の経路: 手元からの手動デプロイ
 

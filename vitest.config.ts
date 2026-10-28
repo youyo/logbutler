@@ -31,6 +31,19 @@ const nodeE2eProject = {
   test: { name: "node-e2e", environment: "node", include: ["test/node-e2e/**/*.test.ts"] },
 };
 
+// 実環境(デプロイ済み Worker + 実 Backlog)の E2E。`mise run test` には含めない(`mise run test:live` だけが実行する)。
+const liveProject = {
+  test: {
+    name: "live",
+    environment: "node",
+    include: ["test/live/**/*.test.ts"],
+    testTimeout: 180_000,
+    hookTimeout: 180_000,
+    fileParallelism: false,
+    sequence: { concurrent: false },
+  },
+};
+
 export default defineConfig({
   test: {
     projects: [
@@ -38,6 +51,7 @@ export default defineConfig({
       project("e2e", "test/e2e/**/*.test.ts"),
       nodeProject,
       nodeE2eProject,
+      liveProject,
     ],
   },
 });

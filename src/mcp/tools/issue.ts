@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { MAX_STATUS_PROJECTS } from "../../analysis/budget";
+import { resolveNotClosedStatusIds } from "../../analysis/open-statuses";
+import { ArgumentError } from "../../errors";
 import {
   boundedCount,
   dateRangeFor,
@@ -44,7 +47,9 @@ export const issueList = defineTool({
     sort: optStr("Sort field (e.g. updated, created)"),
     order: optStr("Sort order (asc/desc)"),
     assignee_id: optStr("Assignee filter: me (resolved via GetMyself) or numeric user ID"),
-    status_id: optStr("Status filter: not-closed (IDs 1,2,3) or comma-separated numeric IDs"),
+    status_id: optStr(
+      "Status filter: not-closed (every status of the target projects except the completed ones, including custom statuses; with no project_key it looks up all your projects) or comma-separated numeric IDs",
+    ),
     keyword: optStr("Keyword search against Backlog issues"),
     due_date: optStr(
       "Due date filter: overdue, this-week, today, this-month, YYYY-MM-DD, or YYYY-MM-DD:YYYY-MM-DD",
@@ -64,6 +69,12 @@ export const issueList = defineTool({
     const count = boundedCount("count", a.count);
     const status = a.status_id ? resolveStatusIds(a.status_id) : undefined;
     const parents = parseCsvInts("parent_issue_ids", a.parent_issue_ids);
+    const keys = [...(a.project_key ? [a.project_key] : []), ...parseCsvStrings(a.project_keys)];
+    if (status === "not-closed" && new Set(keys).size > MAX_STATUS_PROJECTS) {
+      throw new ArgumentError(
+        `status_id=not-closed looks up the statuses of each project, so at most ${MAX_STATUS_PROJECTS} projects can be given, got ${new Set(keys).size}`,
+      );
+    }
     const today = a.due_date || a.start_date ? todayIn(now(), timezone) : undefined;
     const due = a.due_date && today ? dateRangeFor("due_date", a.due_date, today) : undefined;
     const start =
@@ -72,7 +83,6 @@ export const issueList = defineTool({
     const updatedUntil = a.updated_until ? parseDate("updated_until", a.updated_until) : undefined;
 
     // project_key → projectId、assignee "me" → userId。直列に解決する(並列にしない)。
-    const keys = [...(a.project_key ? [a.project_key] : []), ...parseCsvStrings(a.project_keys)];
     const projectIds: number[] = [];
     for (const key of keys) {
       const id = await resolveProjectId(client, key);
@@ -82,12 +92,21 @@ export const issueList = defineTool({
       ? await resolveUserId(client, a.assignee_id, "assignee_id")
       : undefined;
 
+    // not-closed は ID を決め打ちせず、対象プロジェクトの状態一覧から完了集合以外の ID を決める(ADR 0012)。
+    let statusIds: number[] | undefined;
+    if (status === "not-closed") {
+      statusIds = await resolveNotClosedStatusIds(client, [...new Set(keys)]);
+      if (statusIds.length === 0) return []; // 未完了の状態が 1 つもなければ、該当する課題もない
+    } else {
+      statusIds = status;
+    }
+
     return client.request("GET", "/issues", {
       query: {
         projectId: projectIds,
         assigneeId: assignee === undefined ? [] : [assignee],
         parentIssueId: parents ?? [],
-        statusId: status ?? [],
+        statusId: statusIds ?? [],
         keyword: a.keyword || undefined,
         dueDateSince: due?.since,
         dueDateUntil: due?.until,
@@ -104,6 +123,10 @@ export const issueList = defineTool({
   },
 });
 
+/** コメント一覧 API の count の既定値と上限(Backlog)。 */
+const COMMENT_DEFAULT_COUNT = 20;
+const COMMENT_MAX_COUNT = 100;
+
 export const issueCommentList = defineTool({
   name: "logbutler_issue_comment_list",
   title: "課題コメント一覧取得",
@@ -115,10 +138,23 @@ export const issueCommentList = defineTool({
     count: optInt("Max number of comments"),
     offset: optInt("Offset for pagination"),
   }),
-  handler: ({ issue_key, count, offset }, { client }) =>
-    client.request("GET", `/issues/${seg(issue_key)}/comments`, {
-      query: { count: positiveOrUndefined(count), offset: positiveOrUndefined(offset) },
-    }),
+  // コメント一覧 API は minId / maxId / count / order だけで offset を受け付けない(送ると 400 unknownParameter)。
+  // offset は logvalet 互換のスキーマとして残し、count + offset 件を取って先頭 offset 件を読み飛ばす。
+  // order は送らない(Backlog の既定の降順 = 新しい順のまま)。
+  handler: async ({ issue_key, count, offset }, { client }) => {
+    const path = `/issues/${seg(issue_key)}/comments`;
+    const want = positiveOrUndefined(count);
+    const skip = positiveOrUndefined(offset);
+    if (skip === undefined) return client.request("GET", path, { query: { count: want } });
+    const take = (want ?? COMMENT_DEFAULT_COUNT) + skip;
+    if (take > COMMENT_MAX_COUNT) {
+      throw new ArgumentError(
+        `count + offset must be at most ${COMMENT_MAX_COUNT} (Backlog returns at most ${COMMENT_MAX_COUNT} comments per request and has no offset), got ${take}${want === undefined ? ` (count defaults to ${COMMENT_DEFAULT_COUNT})` : ""}`,
+      );
+    }
+    const page = (await client.request<unknown[]>("GET", path, { query: { count: take } })) ?? [];
+    return page.slice(skip);
+  },
 });
 
 export const issueAttachmentList = defineTool({

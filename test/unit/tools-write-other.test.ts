@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { starAdd } from "../../src/mcp/tools/star";
 import { callTool, formPairs } from "../helpers/tool-call";
 
 const noContent = () => new Response(null, { status: 204 });
 
 describe("star_add", () => {
+  it("注釈: 同じ対象に 2 回付けるとスターが 2 個になる(実 Backlog で確認)ので idempotentHint は false。他は書き込み(非破壊)のまま", () => {
+    expect(starAdd.annotations).toEqual({
+      title: "スター追加",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
+  });
+
   const cases: [string, number, string][] = [
     ["issue_id", 1, "issueId=1"],
     ["comment_id", 2, "commentId=2"],

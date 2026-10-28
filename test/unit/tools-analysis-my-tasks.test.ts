@@ -4,6 +4,13 @@ import { ago, endless, issue, NOW, paged, USER_B } from "../helpers/analysis-fix
 import { callTool } from "../helpers/tool-call";
 
 const ME = { id: 1, userId: "a", name: "Alice" };
+const st = (id: number, name: string) => ({ id, projectId: 10, name });
+const STANDARD = [st(1, "未対応"), st(2, "処理中"), st(3, "処理済み"), st(4, "完了")];
+/** 参加プロジェクト P(標準の状態)。未完了の状態 ID は 1,2,3。 */
+const PROJECTS = {
+  "GET /projects": [{ id: 10, projectKey: "P" }],
+  "GET /projects/P/statuses": STANDARD,
+};
 const run = (
   args: Record<string, unknown>,
   respond: Parameters<typeof callTool>[2],
@@ -12,7 +19,7 @@ const run = (
   callTool(
     "logbutler_my_tasks",
     args,
-    { "GET /users/myself": ME, "GET /users/1/watchings": [], ...respond },
+    { "GET /users/myself": ME, "GET /users/1/watchings": [], ...PROJECTS, ...respond },
     { now: opts.now ?? NOW, timezone: opts.timezone ?? "Asia/Tokyo" },
   );
 const keys = (items: { issue_key: string }[]) => items.map((i) => i.issue_key);
@@ -30,11 +37,13 @@ const watching = (
 });
 
 describe("my_tasks", () => {
-  it("API は GetMyself → overdue → upcoming → watching の順に直列。week の NOW(水 10/28)は月 10/26〜日 11/01、overdue は昨日(10/27)まで", async () => {
+  it("API は GetMyself → プロジェクト一覧 → 各プロジェクトの状態一覧 → overdue → upcoming → watching の順に直列。week の NOW(水 10/28)は月 10/26〜日 11/01、overdue は昨日(10/27)まで", async () => {
     const r = await run({}, { "GET /issues": [] });
     expect(r.isError, r.text).toBe(false);
     expect(r.calls).toEqual([
       "GET /users/myself",
+      "GET /projects?archived=false",
+      "GET /projects/P/statuses",
       "GET /issues?assigneeId[]=1&count=100&dueDateUntil=2026-10-27&statusId[]=1&statusId[]=2&statusId[]=3",
       "GET /issues?assigneeId[]=1&count=100&dueDateSince=2026-10-26&dueDateUntil=2026-11-01&statusId[]=1&statusId[]=2&statusId[]=3",
       "GET /users/1/watchings?count=100",
@@ -108,7 +117,7 @@ describe("my_tasks", () => {
     async (_d, now, since, until) => {
       const r = await run({ mode: "next" }, { "GET /issues": [] }, { now: new Date(now) });
       expect(r.json.analysis.mode).toBe("next");
-      expect(r.calls[2]).toContain(`dueDateSince=${since}&dueDateUntil=${until}`);
+      expect(r.calls[4]).toContain(`dueDateSince=${since}&dueDateUntil=${until}`);
       expect(r.json.analysis.date_range).toEqual({
         since: `${since}T00:00:00+09:00`,
         until: `${until}T00:00:00+09:00`,
@@ -119,11 +128,11 @@ describe("my_tasks", () => {
   it("日付は timezone の暦日(UTC 10/28 16:30 は JST では 10/29 木曜、UTC では 10/28 水曜)", async () => {
     const now = new Date("2026-10-28T16:30:00Z");
     const jst = await run({ mode: "next" }, { "GET /issues": [] }, { now, timezone: "Asia/Tokyo" });
-    expect(jst.calls[1]).toContain("dueDateUntil=2026-10-28"); // 昨日 = JST の 10/28
-    expect(jst.calls[2]).toContain("dueDateSince=2026-10-29&dueDateUntil=2026-11-04");
+    expect(jst.calls[3]).toContain("dueDateUntil=2026-10-28"); // 昨日 = JST の 10/28
+    expect(jst.calls[4]).toContain("dueDateSince=2026-10-29&dueDateUntil=2026-11-04");
     const utc = await run({ mode: "next" }, { "GET /issues": [] }, { now, timezone: "UTC" });
-    expect(utc.calls[1]).toContain("dueDateUntil=2026-10-27");
-    expect(utc.calls[2]).toContain("dueDateSince=2026-10-28&dueDateUntil=2026-11-03");
+    expect(utc.calls[3]).toContain("dueDateUntil=2026-10-27");
+    expect(utc.calls[4]).toContain("dueDateSince=2026-10-28&dueDateUntil=2026-11-03");
     expect(utc.json.analysis.date_range.since).toBe("2026-10-28T00:00:00Z");
   });
 
@@ -134,10 +143,138 @@ describe("my_tasks", () => {
     expect(r.calls).toEqual([]);
   });
 
+  describe("未完了の判定は完了集合(statuses.ts の名前集合)以外。ID を決め打ちしない", () => {
+    const issueCalls = (calls: string[]) => calls.filter((c) => c.startsWith("GET /issues"));
+
+    it("カスタム状態(完了集合にない名前)の ID も statusId[] に入れる。ID が被る別名の状態は名前で判断する", async () => {
+      const r = await run(
+        {},
+        {
+          "GET /projects/P/statuses": [...STANDARD, st(101, "レビュー待ち"), st(102, "Closed")],
+          "GET /issues": [],
+        },
+      );
+      expect(issueCalls(r.calls)).toEqual([
+        "GET /issues?assigneeId[]=1&count=100&dueDateUntil=2026-10-27&statusId[]=1&statusId[]=2&statusId[]=3&statusId[]=101",
+        "GET /issues?assigneeId[]=1&count=100&dueDateSince=2026-10-26&dueDateUntil=2026-11-01&statusId[]=1&statusId[]=2&statusId[]=3&statusId[]=101",
+      ]);
+    });
+
+    it("複数プロジェクトの状態一覧を 1 件ずつ引き、重複する ID は 1 つにまとめる", async () => {
+      const r = await run(
+        {},
+        {
+          "GET /projects": [
+            { id: 10, projectKey: "P" },
+            { id: 20, projectKey: "Q" },
+          ],
+          "GET /projects/Q/statuses": [st(1, "未対応"), st(201, "検証中"), st(4, "Done")],
+          "GET /issues": [],
+        },
+      );
+      expect(r.calls.slice(0, 4)).toEqual([
+        "GET /users/myself",
+        "GET /projects?archived=false",
+        "GET /projects/P/statuses",
+        "GET /projects/Q/statuses",
+      ]);
+      expect(r.calls[4]).toContain("statusId[]=1&statusId[]=2&statusId[]=3&statusId[]=201");
+      expect(r.calls[4]).not.toContain("statusId[]=4");
+    });
+
+    it("カスタム状態の課題が overdue / upcoming に出る(再現: ID 1,2,3 決め打ちでは漏れた)", async () => {
+      const custom = issue({
+        key: "P-1",
+        status: "レビュー待ち",
+        statusId: 101,
+        dueDate: "2026-10-25T00:00:00Z",
+      });
+      const r = await run(
+        {},
+        {
+          "GET /projects/P/statuses": [...STANDARD, st(101, "レビュー待ち")],
+          "GET /issues": (c: { url: string }) =>
+            new URL(c.url).searchParams.getAll("statusId[]").includes("101") ? [custom] : [],
+        },
+      );
+      expect(keys(r.json.analysis.overdue)).toEqual(["P-1"]);
+    });
+
+    it("応答側でも完了集合の状態は除く(Backlog が返しても overdue / upcoming に出さない)", async () => {
+      const r = await run(
+        {},
+        {
+          "GET /issues": [
+            issue({ key: "P-1", status: "Closed", statusId: 9, dueDate: "2026-10-25T00:00:00Z" }),
+            issue({ key: "P-2", status: "保留", statusId: 4, dueDate: "2026-10-25T00:00:00Z" }),
+          ],
+        },
+      );
+      expect(keys(r.json.analysis.overdue)).toEqual(["P-2"]);
+    });
+
+    it("プロジェクト一覧の取得に失敗したら warning。statusId は送らず、応答側の完了集合の除外で補う", async () => {
+      const r = await run(
+        {},
+        {
+          "GET /projects": new Response(JSON.stringify({ errors: [{ message: "x", code: 1 }] }), {
+            status: 500,
+          }),
+          "GET /issues": [
+            issue({ key: "P-1", status: "完了", dueDate: "2026-10-25T00:00:00Z" }),
+            issue({ key: "P-2", status: "処理中", dueDate: "2026-10-25T00:00:00Z" }),
+          ],
+        },
+      );
+      expect(r.isError, r.text).toBe(false);
+      expect(r.json.warnings.map((w: { code: string }) => w.code)).toContain(
+        "projects_fetch_failed",
+      );
+      expect(issueCalls(r.calls)[0]).not.toContain("statusId");
+      expect(keys(r.json.analysis.overdue)).toEqual(["P-2"]);
+    });
+
+    it("あるプロジェクトの状態一覧の取得に失敗したら warning。取れたプロジェクトの ID で続ける", async () => {
+      const r = await run(
+        {},
+        {
+          "GET /projects": [
+            { id: 10, projectKey: "P" },
+            { id: 20, projectKey: "Q" },
+          ],
+          "GET /projects/Q/statuses": new Response(
+            JSON.stringify({ errors: [{ message: "x", code: 1 }] }),
+            { status: 403 },
+          ),
+          "GET /issues": [],
+        },
+      );
+      expect(r.json.warnings).toHaveLength(1);
+      expect(r.json.warnings[0]).toMatchObject({
+        code: "statuses_fetch_failed",
+        component: "statuses",
+      });
+      expect(issueCalls(r.calls)[0]).toContain("statusId[]=1&statusId[]=2&statusId[]=3");
+    });
+
+    it("参加プロジェクトが 20 を超えたら、先頭 20 件の状態だけ使い、truncated と warning を返す", async () => {
+      const projects = Array.from({ length: 25 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+      const statuses = Object.fromEntries(
+        projects.map((p) => [`GET /projects/${p.projectKey}/statuses`, STANDARD]),
+      );
+      const r = await run({}, { "GET /projects": projects, ...statuses, "GET /issues": [] });
+      expect(r.calls.filter((c) => c.endsWith("/statuses"))).toHaveLength(20);
+      expect(r.json.analysis.truncated).toBe(true);
+      expect(r.json.warnings.map((w: { code: string }) => w.code)).toEqual([
+        "status_projects_truncated",
+      ]);
+    });
+  });
+
   describe("watching", () => {
     const list = (...w: unknown[]) => ({ "GET /issues": [], "GET /users/1/watchings": w });
 
-    it("担当済み(overdue / upcoming に出た課題)と status.id = 4 の課題は除く", async () => {
+    it("担当済み(overdue / upcoming に出た課題)と完了集合の状態の課題は除く。ID ではなく名前で判断する(ID 4 でも「保留」は残る)", async () => {
       const r = await run(
         {},
         {
@@ -146,12 +283,14 @@ describe("my_tasks", () => {
             watching("P-1"),
             watching("P-2", { status: "完了", statusId: 4 }),
             watching("P-3", { status: "処理中", statusId: 2 }),
+            watching("P-4", { status: "Closed", statusId: 55 }),
+            watching("P-5", { status: "保留", statusId: 4 }),
             { id: 99, type: "issue", issue: null },
           ],
         },
       );
-      expect(keys(r.json.analysis.watching)).toEqual(["P-3"]);
-      expect(r.json.analysis.summary.watching_count).toBe(1);
+      expect(keys(r.json.analysis.watching)).toEqual(["P-3", "P-5"]);
+      expect(r.json.analysis.summary.watching_count).toBe(2);
     });
 
     it("項目: assignee は名前(なければ空文字)、is_overdue、is_stale と days_since_update は lastContentUpdated を優先し、なければ issue.updated", async () => {
@@ -267,20 +406,26 @@ describe("my_tasks", () => {
     expect(r.json.error.code).toBe("permission_error");
   });
 
-  describe("API 呼び出し数(最悪ケース = 1 + 10 + 10 + 10)", () => {
-    it("maxApiCalls は 31", () => {
-      expect(myTasks.maxApiCalls).toBe(31);
+  describe("API 呼び出し数(最悪ケース = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 20 + 10 + 10 + 10)", () => {
+    it("maxApiCalls は 52", () => {
+      expect(myTasks.maxApiCalls).toBe(52);
     });
-    it("3 つとも上限まで続いても 31 回で止まり、truncated と警告が出る", async () => {
+    it("プロジェクト 20 件で 3 つとも上限まで続いても 52 回で止まり、truncated と警告が出る", async () => {
+      const projects = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+      const statuses = Object.fromEntries(
+        projects.map((p) => [`GET /projects/${p.projectKey}/statuses`, STANDARD]),
+      );
       const r = await run(
         { max_response_tokens: 0 }, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
         {
+          "GET /projects": projects,
+          ...statuses,
           "GET /issues": endless((n) => issue({ key: `P-${n}`, dueDate: "2026-10-01T00:00:00Z" })),
           "GET /users/1/watchings": endless((n) => watching(`W-${n}`, { updated: ago(1) })),
         },
       );
       expect(r.isError, r.text).toBe(false);
-      expect(r.calls).toHaveLength(31);
+      expect(r.calls).toHaveLength(52);
       expect(r.json.analysis.truncated).toBe(true);
       expect(r.json.warnings.map((w: { code: string }) => w.code)).toEqual([
         "overdue_truncated",

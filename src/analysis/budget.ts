@@ -17,6 +17,13 @@ export const MAX_ACTIVITY_PAGES = DEFAULT_MAX_PAGES;
 
 /** `search` の Wiki 検索の対象プロジェクト数の上限(プロジェクトごとに 1 回呼ぶため)。logvalet は全プロジェクト。 */
 export const MAX_SEARCH_WIKI_PROJECTS = 10;
+/**
+ * 「未完了」の状態 ID を決めるために状態一覧(GET /projects/:key/statuses)を引くプロジェクト数の上限(ADR 0012)。
+ * my_tasks は参加プロジェクトの先頭からこの数まで(超えたら truncated + warning)。issue_list の
+ * `status_id=not-closed` は、対象がこの数を超えたら argument_error。
+ */
+export const MAX_STATUS_PROJECTS = 20;
+
 /** `digest_unified` の入力と展開後の上限。logvalet は無制限(最悪 2,000 回超)。 */
 export const UNIFIED_MAX_TEAMS = 3;
 /** `user_ids` とチーム展開後のユーザー数の合計の上限。 */
@@ -41,8 +48,8 @@ export const API_BUDGET = {
   issueContext: 1 + DEFAULT_MAX_PAGES + 1 + 1,
   /** GetIssue 1 + (1 + 課題 10 ページ) + コメント 10 ページ + 関連課題 1 */
   issueTriageMaterials: 1 + PROJECT_ISSUE_CALLS + DEFAULT_MAX_PAGES + 1,
-  /** GetMyself 1 + overdue 10 + upcoming 10 + watching 10 */
-  myTasks: 1 + 3 * DEFAULT_MAX_PAGES,
+  /** GetMyself 1 + プロジェクト一覧 1 + 状態一覧 MAX_STATUS_PROJECTS + overdue 10 + upcoming 10 + watching 10 */
+  myTasks: 1 + 1 + MAX_STATUS_PROJECTS + 3 * DEFAULT_MAX_PAGES,
   /** GetProject 1 + 課題 10 ページ */
   digestPeriodic: PROJECT_ISSUE_CALLS,
   /** GetIssue 1 + コメント 10 ページ + アクティビティ MAX_ACTIVITY_PAGES ページ */

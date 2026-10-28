@@ -61,14 +61,16 @@ describe("issue_attachment_upload(base64 のみ)", () => {
     expect(run.recorded[0]?.body).not.toContain("image/png");
   });
 
-  it("0 バイトのファイル（空の base64）も有効", async () => {
+  it("0 バイトのファイル（空の base64）は argument_error（実 Backlog は HTTP 400 code=1 Internal error を返すので、送る前に弾く）", async () => {
     const run = await callTool(
       "logbutler_issue_attachment_upload",
       { issue_key: "PROJ-1", file_name: "empty.txt", file_content_base64: "" },
       respond,
     );
-    expect(run.isError, run.text).toBe(false);
-    expect(run.calls).toEqual(["POST /space/attachment", "PATCH /issues/PROJ-1"]);
+    expect(run.isError).toBe(true);
+    expect(run.json.error.code).toBe("argument_error");
+    expect(run.json.error.message).toContain("file_content_base64");
+    expect(run.calls).toEqual([]);
   });
 
   it("上限はデコード後の実サイズ: ちょうど 4 MiB は通り、4 MiB + 1 は argument_error（Backlog を呼ばない）", async () => {

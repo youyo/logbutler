@@ -327,4 +327,63 @@ describe("document", () => {
       calls: ["GET /documents/tree?projectIdOrKey=PROJ"],
     });
   });
+
+  describe("document_tree: ドキュメントが 0 件のプロジェクト", () => {
+    const emptyRoot = () =>
+      new Response(
+        JSON.stringify({ errors: [{ message: "ActiveRoot node not found", code: 6 }] }),
+        {
+          status: 404,
+        },
+      );
+
+    it("404(ActiveRoot node not found)のときだけ空の木を返す。projectId は GET /projects/{key} で補う", async () => {
+      const run = await callTool(
+        "logbutler_document_tree",
+        { project_key: "EMPTY" },
+        { "GET /documents/tree": emptyRoot, "GET /projects/EMPTY": { id: 30 } },
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls).toEqual([
+        "GET /documents/tree?projectIdOrKey=EMPTY",
+        "GET /projects/EMPTY",
+      ]);
+      expect(run.json).toEqual({
+        projectId: 30,
+        activeTree: { id: "Active", children: [] },
+        trashTree: { id: "Trash", children: [] },
+      });
+    });
+
+    it("他の 404(存在しないプロジェクトなど)は not_found のまま", async () => {
+      const run = await callTool(
+        "logbutler_document_tree",
+        { project_key: "GONE" },
+        {
+          "GET /documents/tree": () =>
+            new Response(JSON.stringify({ errors: [{ message: "No project.", code: 6 }] }), {
+              status: 404,
+            }),
+        },
+      );
+      expect(run.isError).toBe(true);
+      expect(run.json.error.code).toBe("not_found");
+      expect(run.calls).toEqual(["GET /documents/tree?projectIdOrKey=GONE"]);
+    });
+
+    it("ActiveRoot の 404 でもプロジェクト自体が無ければ not_found", async () => {
+      const run = await callTool(
+        "logbutler_document_tree",
+        { project_key: "GONE" },
+        {
+          "GET /documents/tree": emptyRoot,
+          "GET /projects/GONE": () =>
+            new Response(JSON.stringify({ errors: [{ message: "No project.", code: 6 }] }), {
+              status: 404,
+            }),
+        },
+      );
+      expect(run.json.error.code).toBe("not_found");
+    });
+  });
 });

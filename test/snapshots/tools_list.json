@@ -876,7 +876,7 @@
           "type": "string"
         },
         "status_id": {
-          "description": "Status filter: not-closed (IDs 1,2,3) or comma-separated numeric IDs",
+          "description": "Status filter: not-closed (every status of the target projects except the completed ones, including custom statuses; with no project_key it looks up all your projects) or comma-separated numeric IDs",
           "type": "string"
         },
         "timezone": {
@@ -1787,7 +1787,7 @@
     },
     "annotations": {
       "destructiveHint": false,
-      "idempotentHint": true,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": false,
       "title": "スター追加"

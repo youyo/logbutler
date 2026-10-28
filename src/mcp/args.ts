@@ -232,9 +232,12 @@ export function dateRangeFor(
   return { since: input, until: input };
 }
 
-/** issue_list の `status_id`。`not-closed` は [1,2,3]、それ以外は数値の CSV。 */
-export function resolveStatusIds(input: string): number[] {
-  if (input === "not-closed") return [1, 2, 3];
+/**
+ * issue_list の `status_id`。`not-closed` は ID に展開せずそのまま返す(状態 ID はプロジェクトごとに
+ * 違うので、呼び出し側が状態一覧から決める。ADR 0012)。それ以外は数値の CSV。
+ */
+export function resolveStatusIds(input: string): "not-closed" | number[] {
+  if (input === "not-closed") return "not-closed";
   const ids = parseCsvInts("status_id", input);
   if (!ids) {
     throw new ArgumentError(

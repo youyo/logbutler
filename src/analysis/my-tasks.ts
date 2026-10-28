@@ -7,12 +7,9 @@ import { formatInZone, startOfDay, wholeDaysBetween, ymdIn } from "./dates";
 import { analysisEnvelope, type Warning, warningFromError } from "./envelope";
 import { extractProjectKey } from "./issue-detail";
 import { type BacklogIssue, fetchIssuePages, ISSUE_CAP } from "./issues";
+import { collectOpenStatusIds } from "./open-statuses";
 import { DEFAULT_STALE_DAYS, isOverdue } from "./stale";
-
-/** 未完了(未対応・処理中・処理済み)の状態 ID。 */
-const OPEN_STATUS_IDS = [1, 2, 3];
-/** ウォッチ中の課題から除く「完了」の状態 ID。 */
-const CLOSED_STATUS_ID = 4;
+import { DONE_STATUSES, isExcluded } from "./statuses";
 
 /** next モードの日数オフセット: 月 +4 / 火〜金 +6 / 土 +5 / 日 +4。 */
 export function nextModeOffset(weekday: number): number {
@@ -76,7 +73,12 @@ export async function buildMyTasks(ctx: ToolContext, args: { mode?: string; stal
   const myself = await ctx.client.getMyself();
   const today = ymdIn(now, tz);
   const range = dateRangeFor(mode, today);
-  const assignee = { assigneeId: [myself.id], statusId: OPEN_STATUS_IDS };
+  // 未完了 = 完了集合以外の状態(カスタム状態を含む)。ID は参加プロジェクトの状態一覧から決める(ADR 0012)。
+  const open = await collectOpenStatusIds(ctx.client);
+  warnings.push(...open.warnings);
+  if (open.truncated) truncated = true;
+  const assignee = { assigneeId: [myself.id], statusId: open.ids };
+  const done: ReadonlySet<string> = new Set(DONE_STATUSES);
 
   const collect = async (
     name: "overdue" | "upcoming",
@@ -93,7 +95,8 @@ export async function buildMyTasks(ctx: ToolContext, args: { mode?: string; stal
           retryable: false,
         });
       }
-      return r.issues;
+      // 状態 ID を決められなかったとき(statusId を送らない)も、完了集合の課題は出さない。
+      return r.issues.filter((i) => !isExcluded(i, done));
     } catch (e) {
       warnings.push(
         warningFromError(e, `${name}_fetch_failed`, `${name} issues fetch failed`, name),
@@ -141,7 +144,7 @@ export async function buildMyTasks(ctx: ToolContext, args: { mode?: string; stal
   for (const w of watchings) {
     const issue = w.issue;
     if (!issue || assigned.has(issue.issueKey)) continue;
-    if (issue.status?.id === CLOSED_STATUS_ID) continue;
+    if (isExcluded(issue, done)) continue;
     const updated = w.lastContentUpdated || issue.updated;
     const days = updated ? wholeDaysBetween(updated, now) : 0;
     watching.push({

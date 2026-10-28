@@ -46,7 +46,7 @@ logvalet と同じく、必須でない取得の失敗(プロジェクト、課�
 | `project_health` | (1 + PAGES) + 規約(課題種別 1 + 規約課題 PAGES) + K = 11 + 11 + 50 | 72 | `tools-analysis-health.test.ts:308,312` |
 | `issue_context` | GetIssue 1 + コメント PAGES + ステータス 1 + 関連課題 1 | 13 | `tools-analysis-context.test.ts:225,228` |
 | `issue_triage_materials` | GetIssue 1 + (1 + PAGES) + コメント PAGES + 関連課題 1 | 23 | `tools-analysis-triage.test.ts:226,229` |
-| `my_tasks` | GetMyself 1 + overdue PAGES + upcoming PAGES + watching PAGES | 31 | `tools-analysis-my-tasks.test.ts:271,274` |
+| `my_tasks` | GetMyself 1 + プロジェクト一覧 1 + 状態一覧 S(= `MAX_STATUS_PROJECTS` = 20)+ overdue PAGES + upcoming PAGES + watching PAGES = 1 + 1 + 20 + 30(ADR 0012) | 52 | `tools-analysis-my-tasks.test.ts`(`maxApiCalls は 52` と上限まで続く最悪ケース) |
 | `digest_daily` / `digest_weekly` | GetProject 1 + 課題 PAGES | 11 | `tools-analysis-digest-periodic.test.ts:246,250` |
 | `issue_timeline` | GetIssue 1 + コメント PAGES + アクティビティ `max_activity_pages`(≤ 10) | 21 | `tools-analysis-timeline.test.ts:320,323` |
 | `activity_stats` | (scope=user の "me": GetMyself 1) + アクティビティ PAGES | 11 | `tools-analysis-activity-stats.test.ts:150,153,171` |
@@ -136,7 +136,7 @@ GetProject と課題一覧(ページング)を 1 回だけ行い、stale / block
 `{完了, 対応済み, Closed, Done, Resolved}`(`src/analysis/statuses.ts`)。stale / blockers / workload / health で既定の除外、
 triage の `avg_close_days`、digest の completed 判定に使う。`exclude_status` を渡したツールはそれだけを使い、既定は足さない。
 `project_health` の曖昧さ検出は logvalet どおり**除外せず全課題**を見る(`exclude_status` の対象にしていない。残課題)。
-`my_tasks` の overdue / upcoming は Backlog の `statusId[]=1,2,3`(未完了)で絞り、watching は `status.id = 4` を除く(logvalet どおり)。
+`my_tasks` の未完了も完了集合以外に統一した(M08 の実環境 E2E で、カスタム状態の課題が `statusId[]=1,2,3` の決め打ちで漏れると判明。ADR 0012)。overdue / upcoming は参加プロジェクトの状態一覧から決めた ID で絞り、watching は状態名が完了集合のものを除く。
 
 ### 同順位の並び
 

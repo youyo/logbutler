@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { issueCreate } from "../../src/mcp/tools/issue-write";
 import { jsonResponse } from "../helpers/mock-fetch";
 import { callTool, formPairs } from "../helpers/tool-call";
 
@@ -8,21 +9,82 @@ const noContent = () => new Response(null, { status: 204 });
 describe("issue_create", () => {
   const project = { "GET /projects/PROJ": { id: 10, projectKey: "PROJ" } };
 
-  it("必須の引数だけ: projectId を解決して POST /issues。priority_id は送らない", async () => {
+  const priorities = [
+    { id: 2, name: "高" },
+    { id: 3, name: "中" },
+    { id: 4, name: "低" },
+  ];
+
+  it("必須の引数だけ: priority_id 省略時は GET /priorities から既定値(id 3 があれば 3)を決めて POST /issues", async () => {
     const run = await callTool(
       "logbutler_issue_create",
       { project_key: "PROJ", summary: "件名", issue_type_id: 2 },
-      { ...project, "POST /issues": created },
+      { ...project, "GET /priorities": priorities, "POST /issues": created },
     );
     expect(run.isError, run.text).toBe(false);
-    expect(run.calls).toEqual(["GET /projects/PROJ", "POST /issues"]);
+    expect(run.calls).toEqual(["GET /projects/PROJ", "GET /priorities", "POST /issues"]);
     expect(run.json).toEqual(created);
-    const post = run.recorded[1];
+    const post = run.recorded[2];
     expect(post?.headers.get("content-type")).toContain("application/x-www-form-urlencoded");
-    expect(formPairs(post)).toEqual(["issueTypeId=2", "projectId=10", "summary=件名"]);
+    expect(formPairs(post)).toEqual([
+      "issueTypeId=2",
+      "priorityId=3",
+      "projectId=10",
+      "summary=件名",
+    ]);
   });
 
-  it("すべての引数: 配列は key[]、日付は YYYY-MM-DD、priority_id は指定したときだけ", async () => {
+  it("priority_id 省略で一覧に id 3 が無ければ、一覧の中央の要素(名前に頼らない)", async () => {
+    const run = await callTool(
+      "logbutler_issue_create",
+      { project_key: "PROJ", summary: "件名", issue_type_id: 2 },
+      {
+        ...project,
+        "GET /priorities": [
+          { id: 12, name: "Low" },
+          { id: 10, name: "High" },
+          { id: 11, name: "Normal" },
+        ],
+        "POST /issues": created,
+      },
+    );
+    expect(run.isError, run.text).toBe(false);
+    expect(formPairs(run.recorded[2])).toContain("priorityId=11");
+  });
+
+  it("priority_id 省略で優先度一覧が空なら argument_error(選べる id と指定の案内)。課題は作らない", async () => {
+    const run = await callTool(
+      "logbutler_issue_create",
+      { project_key: "PROJ", summary: "件名", issue_type_id: 2 },
+      { ...project, "GET /priorities": [], "POST /issues": created },
+    );
+    expect(run.isError).toBe(true);
+    expect(run.json.error.code).toBe("argument_error");
+    expect(run.json.error.message).toContain("priority_id");
+    expect(run.calls).not.toContain("POST /issues");
+  });
+
+  it("maxApiCalls は 25 = GetProject 1 + 規約(課題種別 1 + 10 ページ) + カテゴリ 1 + 案件の親課題 10 ページ + 優先度 1 + POST 1", () => {
+    expect(issueCreate.maxApiCalls).toBe(25);
+  });
+
+  it("priority_id を明示したらそのまま送る(0 も変換せず Backlog に検証を任せる)", async () => {
+    for (const [given, sent] of [
+      [2, "priorityId=2"],
+      [0, "priorityId=0"],
+    ] as const) {
+      const run = await callTool(
+        "logbutler_issue_create",
+        { project_key: "PROJ", summary: "件名", issue_type_id: 2, priority_id: given },
+        { ...project, "POST /issues": created },
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls).toEqual(["GET /projects/PROJ", "POST /issues"]);
+      expect(formPairs(run.recorded[1])).toContain(sent);
+    }
+  });
+
+  it("すべての引数: 配列は key[]、日付は YYYY-MM-DD、priority_id は指定した値を送る", async () => {
     const run = await callTool(
       "logbutler_issue_create",
       {
@@ -120,6 +182,7 @@ engagements:
       "GET /issues": (call: { url: string }) =>
         issues(new URL(call.url).searchParams.get("issueTypeId[]")),
       "GET /projects/PROJ/categories": [{ id: 20, name: "顧客A 基盤更改" }],
+      "GET /priorities": priorities,
       "POST /issues": created,
     });
     const byType = (t: string | null) => (t === "10" ? [rule] : t === "11" ? [parent] : []);
@@ -137,6 +200,7 @@ engagements:
         "categoryId[]=20",
         "issueTypeId=2",
         "parentIssueId=101",
+        "priorityId=3",
         "projectId=10",
         "summary=s",
       ]);
@@ -159,6 +223,7 @@ engagements:
         "categoryId[]=7",
         "issueTypeId=2",
         "parentIssueId=55",
+        "priorityId=3",
         "projectId=10",
         "summary=s",
       ]);
@@ -179,6 +244,7 @@ engagements:
       expect(formPairs(run.recorded.at(-1))).toEqual([
         "issueTypeId=2",
         "parentIssueId=101",
+        "priorityId=3",
         "projectId=10",
         "summary=s",
       ]);
@@ -265,6 +331,59 @@ describe("issue_update", () => {
       { "PATCH /issues/PROJ-1": updated },
     );
     expect(formPairs(set.recorded[0])).toEqual(["parentIssueId=12"]);
+  });
+
+  describe('変更なしの更新(実 Backlog は現在と同じ値だけの PATCH に 400 code=7 "No comment content." を返す)', () => {
+    const noChange = () =>
+      new Response(JSON.stringify({ errors: [{ message: "No comment content.", code: 7 }] }), {
+        status: 400,
+      });
+    const current = { id: 1, issueKey: "PROJ-1", description: "same" };
+
+    it("その 400 のときだけ課題を GET して成功として返す(PATCH → GET の順)", async () => {
+      const run = await callTool(
+        "logbutler_issue_update",
+        { issue_key: "PROJ-1", description: "same" },
+        { "PATCH /issues/PROJ-1": noChange, "GET /issues/PROJ-1": current },
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls).toEqual(["PATCH /issues/PROJ-1", "GET /issues/PROJ-1"]);
+      expect(run.json).toEqual(current);
+    });
+
+    it.each([
+      ["code が 7 でない", { message: "No comment content.", code: 6 }, 400],
+      ["message が違う", { message: "Something else.", code: 7 }, 400],
+      ["HTTP 400 でない", { message: "No comment content.", code: 7 }, 422],
+    ])("%s 400 はそのままエラー(GET しない)", async (_label, error, status) => {
+      const run = await callTool(
+        "logbutler_issue_update",
+        { issue_key: "PROJ-1", description: "same" },
+        {
+          "PATCH /issues/PROJ-1": () =>
+            new Response(JSON.stringify({ errors: [error] }), { status }),
+        },
+      );
+      expect(run.isError).toBe(true);
+      expect(run.calls).toEqual(["PATCH /issues/PROJ-1"]);
+      expect(run.json.error.code).toBe(status === 422 ? "argument_error" : "api_error");
+    });
+
+    it("GET が失敗したらそのエラーを返す", async () => {
+      const run = await callTool(
+        "logbutler_issue_update",
+        { issue_key: "PROJ-1", description: "same" },
+        {
+          "PATCH /issues/PROJ-1": noChange,
+          "GET /issues/PROJ-1": () =>
+            new Response(JSON.stringify({ errors: [{ message: "No issue.", code: 6 }] }), {
+              status: 404,
+            }),
+        },
+      );
+      expect(run.isError).toBe(true);
+      expect(run.json.error.code).toBe("not_found");
+    });
   });
 
   it("コメントだけの更新も更新項目として数える", async () => {

@@ -1,6 +1,6 @@
 /** 課題の書き込み系ツール（作成・更新・コメント・関連課題・添付）。 */
 import { z } from "zod";
-import type { BacklogClient } from "../../backlog/client";
+import { BacklogApiError, type BacklogClient } from "../../backlog/client";
 import { resolveEngagement } from "../../conventions/engagement";
 import { ArgumentError } from "../../errors";
 import {
@@ -69,12 +69,35 @@ const SHARED_FIELDS = {
   start: "Start date in YYYY-MM-DD format",
 } as const;
 
+/** 例にある「中」の ID。優先度の ID が固定とは公式に明記されていないので、一覧にあるときだけ使う。 */
+const NORMAL_PRIORITY_ID = 3;
+
+/**
+ * priority_id 省略時の既定値を GET /priorities から決める。Backlog の課題追加は priorityId 必須
+ * （省略も 0 も error.invalid : priorityId）。id 3 があれば 3、なければ id 順の中央の要素。
+ * 名前は言語で変わるので使わない。決められなければ argument_error。
+ */
+async function resolveDefaultPriorityId(client: BacklogClient): Promise<number> {
+  const list = (await client.request<{ id: number; name?: string }[]>("GET", "/priorities")) ?? [];
+  const sorted = [...list].sort((x, y) => x.id - y.id);
+  if (sorted.some((p) => p.id === NORMAL_PRIORITY_ID)) return NORMAL_PRIORITY_ID;
+  const middle = sorted[Math.floor((sorted.length - 1) / 2)];
+  if (!middle) {
+    throw new ArgumentError(
+      "priority_id を指定してください(優先度の一覧を取得できず、既定値を決められませんでした)",
+    );
+  }
+  return middle.id;
+}
+
 export const issueCreate = defineTool({
   name: "logbutler_issue_create",
   title: "課題作成",
   description: "Create a new issue",
   category: "WriteNonIdempotent",
   toolset: "issue",
+  // GetProject 1 + 規約(課題種別 1 + 10 ページ) + カテゴリ 1 + 案件の親課題 10 ページ + 優先度 1 + POST 1
+  maxApiCalls: 25,
   inputSchema: z.object({
     project_key: reqStr("Project key"),
     summary: reqStr("Issue summary"),
@@ -107,13 +130,15 @@ export const issueCreate = defineTool({
       }
     }
 
+    const priorityId = a.priority_id ?? (await resolveDefaultPriorityId(client));
+
     return client.request("POST", "/issues", {
       form: {
         projectId,
         summary: a.summary,
         issueTypeId: a.issue_type_id,
-        // 未指定なら送らない（logvalet は priorityId=0 を送っていた。ADR 0005 と tool-diff を参照）。
-        priorityId: positiveOrUndefined(a.priority_id),
+        // 明示された値（0 も）はそのまま送り、検証は Backlog に任せる。未指定のときだけ一覧から決める。
+        priorityId,
         description: nonEmpty(a.description),
         assigneeId: positiveOrUndefined(a.assignee_id),
         parentIssueId,
@@ -127,6 +152,16 @@ export const issueCreate = defineTool({
     });
   },
 });
+
+/** 変更がなかった更新に対する Backlog の応答(HTTP 400・code=7・message が "No comment content.")。 */
+function isNoChangeUpdate(e: unknown): boolean {
+  return (
+    e instanceof BacklogApiError &&
+    e.status === 400 &&
+    e.backlogCode === 7 &&
+    e.backlogMessage === "No comment content."
+  );
+}
 
 export const issueUpdate = defineTool({
   name: "logbutler_issue_update",
@@ -182,25 +217,32 @@ export const issueUpdate = defineTool({
       a.comment !== undefined;
     if (!hasField) throw new ArgumentError("at least one field to update must be specified");
 
-    return client.request("PATCH", `/issues/${seg(a.issue_key)}`, {
-      form: {
-        summary: a.summary,
-        description: a.description,
-        statusId: a.status_id,
-        priorityId: a.priority_id,
-        assigneeId: a.assignee_id,
-        issueTypeId: a.issue_type_id,
-        // 0 は親の解除。Backlog には空文字で送る（backlog4j と同じ。公式ドキュメントに記載なし）。
-        parentIssueId: parentIssueId === 0 ? "" : parentIssueId,
-        categoryId: categoryIds ?? [],
-        versionId: v.versionIds ?? [],
-        milestoneId: v.milestoneIds ?? [],
-        notifiedUserId: v.notifiedUserIds ?? [],
-        dueDate: v.dueDate,
-        startDate: v.startDate,
-        comment: a.comment,
-      },
-    });
+    try {
+      return await client.request("PATCH", `/issues/${seg(a.issue_key)}`, {
+        form: {
+          summary: a.summary,
+          description: a.description,
+          statusId: a.status_id,
+          priorityId: a.priority_id,
+          assigneeId: a.assignee_id,
+          issueTypeId: a.issue_type_id,
+          // 0 は親の解除。Backlog には空文字で送る（backlog4j と同じ。公式ドキュメントに記載なし）。
+          parentIssueId: parentIssueId === 0 ? "" : parentIssueId,
+          categoryId: categoryIds ?? [],
+          versionId: v.versionIds ?? [],
+          milestoneId: v.milestoneIds ?? [],
+          notifiedUserId: v.notifiedUserIds ?? [],
+          dueDate: v.dueDate,
+          startDate: v.startDate,
+          comment: a.comment,
+        },
+      });
+    } catch (e) {
+      // 現在と同じ値だけの更新は、実 Backlog が HTTP 400 code=7 "No comment content." を返す。何も変わらなかった
+      // だけで失敗ではない(このツールは冪等)ので、その 400 に限り、課題を GET して成功として返す。
+      if (isNoChangeUpdate(e)) return client.request("GET", `/issues/${seg(a.issue_key)}`);
+      throw e;
+    }
   },
 });
 
@@ -349,6 +391,12 @@ function decodeUpload(base64: string): Uint8Array<ArrayBuffer> {
       `decoded file content exceeds ${MAX_UPLOAD_BYTES} bytes (got ${binary.length})`,
     );
   }
+  // 実 Backlog は 0 バイトのファイルを HTTP 400 code=1 Internal error で拒否する。送る前に弾く。
+  if (binary.length === 0) {
+    throw new ArgumentError(
+      "file_content_base64 must not be empty (0-byte files cannot be attached)",
+    );
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
@@ -375,7 +423,7 @@ export const issueAttachmentUpload = defineTool({
     ),
   }),
   handler: async (a, { client }) => {
-    // 0 バイトのファイル（空の base64）も有効なので、存在で判定する。
+    // 空の base64（0 バイト）は decodeUpload が argument_error にする。
     if (a.file_content_base64 === undefined) {
       throw new ArgumentError("file_content_base64 is required");
     }
