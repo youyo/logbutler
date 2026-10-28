@@ -15,6 +15,16 @@ export const COMMENT_LOOKUP_BUDGET = 50;
 /** timeline の `max_activity_pages` の上限。 */
 export const MAX_ACTIVITY_PAGES = DEFAULT_MAX_PAGES;
 
+/** `search` の Wiki 検索の対象プロジェクト数の上限(プロジェクトごとに 1 回呼ぶため)。logvalet は全プロジェクト。 */
+export const MAX_SEARCH_WIKI_PROJECTS = 10;
+/** `digest_unified` の入力と展開後の上限。logvalet は無制限(最悪 2,000 回超)。 */
+export const UNIFIED_MAX_TEAMS = 3;
+/** `user_ids` とチーム展開後のユーザー数の合計の上限。 */
+export const UNIFIED_MAX_USERS = 10;
+export const UNIFIED_MAX_ISSUE_KEYS = 20;
+/** `digest_unified` のアクティビティを 1 ソース(ユーザー / プロジェクト / スペース)ごとに辿るページ数の上限(= 500 件)。 */
+export const UNIFIED_ACTIVITY_PAGES = 5;
+
 /** 規約(conventions)の読み込み: 課題種別一覧 1 + 規約課題のページング(最大 10)。 */
 const CONVENTIONS_CALLS = 1 + DEFAULT_MAX_PAGES;
 
@@ -39,4 +49,31 @@ export const API_BUDGET = {
   issueTimeline: 1 + DEFAULT_MAX_PAGES + MAX_ACTIVITY_PAGES,
   /** (user: GetMyself 1) + アクティビティ 10 ページ */
   activityStats: 1 + DEFAULT_MAX_PAGES,
+
+  // --- M05B ---
+  /** GetSpace 1 + GetSpaceDiskUsage 1 */
+  spaceDigest: 2,
+  /** GetDocument 1 + ListProjects 1 + ListDocumentAttachments 1 */
+  documentDigest: 3,
+  /** (project_keys: GetProject P + 検索 1)。キーなしは 検索 1 + ListProjects 1 = 2 で、前者が大きい。 */
+  documentSearch: MAX_PROJECT_KEYS + 1,
+  /**
+   * キーあり: GetProject P + 課題 1 + ドキュメント 1 + Wiki P(= プロジェクト数)。
+   * キーなし: ListProjects 1 + 課題 1 + ドキュメント 1 + Wiki MAX_SEARCH_WIKI_PROJECTS。
+   */
+  search: Math.max(MAX_PROJECT_KEYS + 2 + MAX_PROJECT_KEYS, 1 + 2 + MAX_SEARCH_WIKI_PROJECTS),
+  /** アクティビティ 1 回(limit ≤ 100 の 1 ページ) */
+  activityDigest: 1,
+  /** (GetMyself 1) + アクティビティ 10 ページ */
+  userActivity: 1 + DEFAULT_MAX_PAGES,
+  /**
+   * チーム T + プロジェクト P + ユーザー U(GetUser)+ max(課題 10 ページ, 課題キー K)
+   * + アクティビティのソース max(U, P) × UNIFIED_ACTIVITY_PAGES
+   */
+  digestUnified:
+    UNIFIED_MAX_TEAMS +
+    MAX_PROJECT_KEYS +
+    UNIFIED_MAX_USERS +
+    Math.max(DEFAULT_MAX_PAGES, UNIFIED_MAX_ISSUE_KEYS) +
+    Math.max(UNIFIED_MAX_USERS, MAX_PROJECT_KEYS) * UNIFIED_ACTIVITY_PAGES,
 } as const;

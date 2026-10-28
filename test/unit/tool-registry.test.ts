@@ -138,6 +138,9 @@ describe("defineTool", () => {
     expect(() => defineTool({ ...base, name: "logbutler_issue" })).toThrow(/logbutler_/);
     expect(() => defineTool({ ...base, name: "logbutler_Issue_Get" })).toThrow(/logbutler_/);
     expect(() => defineTool({ ...base, name: "logbutler_shared_file_list" })).not.toThrow();
+    // logvalet の横断検索ツールは action のない `search`。baseline に合わせた唯一の例外
+    expect(() => defineTool({ ...base, name: "logbutler_search" })).not.toThrow();
+    expect(() => defineTool({ ...base, name: "logbutler_searching" })).toThrow(/logbutler_/);
   });
 
   it("annotation の title は日本語を渡す想定で、そのまま載る", () => {
@@ -199,6 +202,53 @@ describe("toolset と環境変数", () => {
 
   it("関係のないクエリは無視する(環境変数は読まない)", () => {
     expect(q("foo=bar")).toEqual({ toolsets: "all", readOnly: false });
+    expect(q("optimize_context=true&codemode=1&foo=bar")).toEqual({
+      toolsets: "all",
+      readOnly: false,
+    });
+    expect(q("ro=true&mode=ro")).toEqual({ toolsets: "all", readOnly: false });
+  });
+
+  it("read_only / toolsets のまぎらわしい綴り(大文字小文字・_ と - の違い)は QueryError にして、正しいキー名を案内する", () => {
+    for (const key of ["readonly", "readOnly", "READ_ONLY", "read-only", "Read_Only"]) {
+      expect(() => q(`${key}=true`), key).toThrow(QueryError);
+      expect(() => q(`${key}=true`), key).toThrow(new RegExp(`${key}.*read_only`));
+    }
+    for (const key of ["tool_sets", "Toolsets", "TOOL-SETS"]) {
+      expect(() => q(`${key}=issue`), key).toThrow(QueryError);
+      expect(() => q(`${key}=issue`), key).toThrow(new RegExp(`${key}.*toolsets`));
+    }
+    // 正しい綴りと併記していても、間違った綴りは見逃さない
+    expect(() => q("read_only=true&readOnly=true")).toThrow(QueryError);
+    expect(() => q("toolsets=issue&tool_sets=wiki")).toThrow(QueryError);
+    // 値が空でも綴り違いのキー自体を弾く(気づけないままの全ツール公開を防ぐ)
+    expect(() => q("readonly=")).toThrow(QueryError);
+  });
+
+  it("read / tool で始まる未知のキー(単数形・誤字・前後空白つき)も QueryError にする", () => {
+    const bad = [
+      "toolset",
+      "tool",
+      "tools",
+      "Toolset",
+      "readonlly",
+      "readOnlyMode",
+      "read",
+      "read-only",
+      " read_only ",
+      "tool%20sets",
+    ];
+    for (const key of bad) {
+      const qs = `${key.replace(/ /g, "%20")}=true`;
+      expect(() => q(qs), key).toThrow(QueryError);
+      expect(() => q(qs), key).toThrow(/read_only|toolsets/);
+    }
+    // 正規のキーとの併記でも見逃さない
+    expect(() => q("toolsets=issue&toolset=wiki")).toThrow(QueryError);
+    // Portal などが付けうるキーは誤検知しない
+    for (const key of ["optimize_context", "codemode", "foo", "ro", "mode"]) {
+      expect(() => q(`${key}=true`), key).not.toThrow();
+    }
   });
 
   it("selectTools: toolset で絞る", () => {

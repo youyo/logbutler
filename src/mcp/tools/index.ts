@@ -13,6 +13,15 @@ import {
   projectHealth,
   userWorkload,
 } from "./analysis";
+import {
+  activityDigest,
+  digestUnified,
+  documentDigest,
+  documentSearch,
+  search,
+  spaceDigest,
+  userActivity,
+} from "./digest";
 import { documentCreate, documentGet, documentList, documentTree } from "./document";
 import {
   issueAttachmentDownload,
@@ -60,7 +69,7 @@ import {
   wikiTags,
 } from "./wiki";
 
-/** 公開するツールの一覧。M03 の読み取りツール(単純系)、M04 の書き込みツール、M05A の分析ツール。M05B 以降のツールはここに足す。 */
+/** 公開するツールの一覧。M03 の読み取りツール(単純系)、M04 の書き込みツール、M05A の分析ツール。M05B の digest・検索の 7 個。 */
 export const ALL_TOOLS: readonly ToolDefinition[] = [
   metaStatuses,
   metaIssueTypes,
@@ -128,4 +137,12 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   digestWeekly,
   issueTimeline,
   activityStats,
+  // M05B: digest 系 6 個と user_activity
+  spaceDigest,
+  documentDigest,
+  documentSearch,
+  search,
+  activityDigest,
+  userActivity,
+  digestUnified,
 ];

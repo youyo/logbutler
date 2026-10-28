@@ -23,8 +23,10 @@ M05A までは、ツールの公開範囲(toolset・読み取り専用)と「今
   `{"error":"invalid_query","error_description":"<理由>"}` を返す。従来(環境変数)は 500 + ログのみだったが、接続 URL を直すのは
   クライアントなので理由を返す。理由に秘密は入らない(入力の toolset 名と固定の有効名一覧だけ)。
   認証が先: トークンなしの不正クエリは 401(`OAuthProvider` が `apiHandler` の前に弾く)。
-- 関係のないクエリパラメータは無視する。**注意**: `?readonly=true` のような綴り違いは無視され、書き込み可能なまま接続される。
-  `read_only` の名前を間違えても気づけない点は既知の弱点(受け入れた。厳格にすると Portal などが付ける未知のパラメータで接続できなくなる恐れがある)。
+- 関係のないクエリパラメータは無視する(Portal などが付ける未知のパラメータで接続できなくなるのを避ける)。
+  **ただし**、小文字にして `_` と `-` を除いた綴りが `read_only` / `toolsets` に一致する未知のキー(`readonly` `readOnly`
+  `READ_ONLY` `read-only` `tool_sets` など)は 400(`error: "invalid_query"`。`QueryError`)にして、正しいキー名を本文で案内する(M05B で追加)。
+  綴り違いを無視すると、読み取り専用のつもりで書き込み可能なまま接続してしまうため。
 - 不正な `timezone` 引数は**クライアント由来**なので `argument_error`(Backlog は呼ばない)。検証は `registerTools` が 1 か所で行い、
   ツール側は `ctx.timezone` を読むだけ(`timezone` を宣言したツールだけが対象)。コードが与える既定値(`RegisterDeps.timezone`)が不正な場合だけ従来どおり `generic_error`。
 - `timezone` 引数の追加は logvalet の baseline との**意図した差分**。`ALLOWED_CHANGES` に理由つきで載せ、
@@ -69,4 +71,5 @@ M07 では、実際に Portal / 各 MCP クライアントが送る DCR リク�
 ## 結果・残課題
 
 - 本番の Portal がクエリ付き URL を保持するか(上記の未検証の前提)は M07 で確認する。
-- 綴り違いのクエリを無視する弱点(上記)。
+- 綴り違いのクエリ: 小文字化・`_` `-` と空白の除去後に `read` または `tool` で始まる未知のキー(`toolset` `tools` `readonlly` `readOnlyMode` `read-only` など)は 400 にした。
+  `optimize_context` `codemode` など無関係なキーは無視する。限界: `ro` `mode` のような短い別名や、`read` / `tool` で始まらない綴り(`rdonly` など)は検出できず、無視される。

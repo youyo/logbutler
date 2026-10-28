@@ -84,6 +84,39 @@ describe("E2E 13-1: URL クエリ(toolsets / read_only)", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("read_only の綴り違い(readonly など)は 400 で、正しいキー名を案内する。tools/call も実行されない", async () => {
+    const { token, calls } = await loggedIn();
+    for (const key of ["readonly", "readOnly", "read-only"]) {
+      const res = await mcpRequest(
+        token,
+        "tools/call",
+        { name: "logbutler_watching_delete", arguments: { watching_id: 5 } },
+        `${MCP_URL}?${key}=true`,
+      );
+      expect(res.status, key).toBe(400);
+      const text = await res.text();
+      expect(text, key).toContain(key);
+      expect(text, key).toContain("read_only");
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("read / tool で始まる未知のキー(toolset・readonlly など)も 400。optimize_context などは無視して 200", async () => {
+    const { token, calls } = await loggedIn();
+    for (const key of ["toolset", "readonlly", "tools", "readOnlyMode"]) {
+      const res = await mcpRequest(token, "tools/list", {}, `${MCP_URL}?${key}=wiki`);
+      expect(res.status, key).toBe(400);
+      const text = await res.text();
+      expect(text, key).toContain(key);
+      expect(text, key).toMatch(/read_only|toolsets/);
+    }
+    for (const key of ["optimize_context", "codemode"]) {
+      const res = await mcpRequest(token, "tools/list", {}, `${MCP_URL}?${key}=true`);
+      expect(res.status, key).toBe(200);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   it("クエリ付き URL でもトークンなしは 401 で、チャレンジの resource_metadata はクエリを含まない正規 URL", async () => {
     const res = await mcpRequest(null, "tools/list", {}, `${MCP_URL}?toolsets=wiki`);
     expect(res.status).toBe(401);

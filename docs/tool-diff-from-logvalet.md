@@ -54,7 +54,7 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 
 `issue_stale` `project_blockers` `user_workload` `project_health` `issue_context` `issue_triage_materials` `my_tasks`
 `digest_daily` `digest_weekly` `issue_timeline` `activity_stats` の `description` / `inputSchema` / `annotations` は、logvalet の baseline と**差分 0**
-(`ALLOWED_CHANGES` `ALLOWED_MISSING` `ALLOWED_EXTRA` は増やしていない。`test/unit/tools-list-snapshot.test.ts` が 64 ツールで確認)。
+(`ALLOWED_CHANGES` `ALLOWED_MISSING` `ALLOWED_EXTRA` は増やしていない。`test/unit/tools-list-snapshot.test.ts` が確認)。
 出力は snake_case の `AnalysisEnvelope`(`schema_version` `resource` `generated_at` `profile` `space` `base_url` `warnings` `analysis`)。
 `profile` は空文字、`space` はスペースのホストの先頭ラベル、`base_url` は `https://<ホスト>`。
 
@@ -89,6 +89,45 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 | `activity_stats` | `by_date` / `by_hour` / `peak_day_of_week` は UTC で集計 | `timezone` 引数(省略時 Asia/Tokyo)で集計。`by_type` `by_actor` `by_date` はキー昇順 | 日付の解釈はタイムゾーン基準という方針の一貫性。UTC で見たいときは `timezone: "UTC"`。`tools-analysis-activity-stats.test.ts` の集計 |
 | 全般 | activity type 名の表が analysis と digest の 2 か所 | `src/analysis/activity-types.ts` の 1 か所 | 重複の排除 |
 
+## M05B: digest 系 6 個 + user_activity
+
+`space_digest` `document_digest` `document_search` `search` `activity_digest` `user_activity` `digest_unified` の `description` /
+`inputSchema` / `annotations` は、logvalet の baseline と**差分 0**(`activity_digest` `user_activity` `digest_unified` の
+`properties.timezone` の追加だけが `ALLOWED_CHANGES` の許容。M05.5 の決定)。これで baseline の 71 ツールすべてを公開し、
+`tools-list-snapshot.test.ts` が 71 ツールで確認する(`ALLOWED_MISSING` `ALLOWED_EXTRA` は空のまま)。
+出力は snake_case の `DigestEnvelope`(`AnalysisEnvelope` と同じで最後のキーが `digest`)。`resource` は logvalet と同じ
+(`space` `document` `document_search` `search` `activity` `digest`)。`user_activity` は新規に `user_activity`。
+toolset: `space_digest` `document_digest` `activity_digest` `digest_unified` は `digest`、`document_search` `search` は `search`、
+`user_activity` は `activity`(logvalet は `tools_user.go` に置いていたが、アクティビティの取得なので `activity` に入れた)。
+ツール名 `logbutler_search` は、baseline に合わせて action のない唯一の名前(`defineTool` の名前規則の例外)。
+
+| ツール | logvalet | Logbutler | 理由・テスト |
+|---|---|---|---|
+| 全般: `count` / `limit` の範囲 | `document_search` `search` は 100 超を黙って 100 に丸める | `count` は 1〜100、範囲外は `argument_error`(`activity_digest` の `limit` も 1〜100)。M03 の `boundedCount` と同じ | 黙った丸めをしない。`tools-digest-document.test.ts` `tools-digest-search.test.ts` `tools-digest-activity.test.ts` |
+| 全般: `detail` | 知らない値は黙って `meta` 扱い | `snippet` / `meta` / `full`(`search` は `snippet` / `meta`)以外は `argument_error` | 同上 |
+| 全般: 時刻 | digest が `time.Now()` 直書き | `generated_at` は `ToolContext.now` | 固定してテストできる |
+| 全般: 期間の日付 | UTC の 00:00。`activity_digest` は `since` / `until` を出力にエコーするだけ。`user_activity` だけ `until` を当日の終わりまで含める | `timezone` 引数(省略時 `Asia/Tokyo`)の暦日で、`since` は当日 00:00、`until` は当日 23:59:59.999(当日を含める)。出力の `since` / `until` はオフセットつき RFC 3339 | ロードマップの決定事項 |
+| 全般: 並び | related_* などが Go の map の順 | キー昇順に固定(`types` `projects` `by_status` `by_user` `related_issue_keys` `related_project_keys`) | 決定的にする |
+| `document_search` | URL のパス(プロジェクトキー・ドキュメント ID)が未エスケープ | `encodeURIComponent`(`/` や空白を含んでも URL が壊れない)。`snippet` はコードポイント単位(サロゲートペアを割らない。小文字化は 1 コードポイントずつで、長さが変わる文字は元のまま) | `analysis-snippet.test.ts`、`tools-digest-document.test.ts` の URL |
+| `document_search` / `search` の `project_keys` | 個数に上限なし | 5 個まで(超えたら `argument_error`)。重複は 1 つにまとめる。`document_search` は GetProject の結果から URL のキーを引き、ListProjects を呼ばない | 呼び出し数を式で閉じる(ADR 0006) |
+| `search` | `project_keys` の GetProject が 1 つでも失敗すると全体エラー | warning `project_fetch_failed`(component `scope.projects.<KEY>`)にして、引けた分で検索する。**全部引けなければ**スペース全体を検索せず、空の結果と warning | 絞り込みを失って意図しない範囲を返さない。`tools-digest-search.test.ts`、e2e `digest-tools.test.ts:339,362` |
+| `search` の Wiki 検索 | 全プロジェクトに 1 回ずつ(プロジェクト数に比例) | 先頭 10 プロジェクトまで。超えたら `wiki_search_truncated` と `truncated: true`。`digest.truncated` を常に出す。`count + offset + 1` 件集まって止めたときは truncated にしない | 呼び出し数の上限(ADR 0006)。e2e `digest-tools.test.ts:264` |
+| `search` の `possibly_more_by_type` | 0 / 1 の整数 | 同じ(互換のため 0 / 1 のまま) | — |
+| `activity_digest` | 最新 `limit` 件をそのまま使う。`since` / `until` は出力にエコー | 取得は 1 回(最新 `limit` 件)のまま、`since` / `until` で**取得後に絞る**。`created` のない活動は期間指定時に除く。`limit` 件ちょうど取れて期間の端(`since`)に届いていなければ `truncated: true`。`related_*` は昇順 | 期間が実際に効く。**制限**: 期間内でも最新 `limit` 件より古い活動は含まれない(`truncated` で分かる)。`tools-digest-activity.test.ts` |
+| `user_activity` の出力 | **エンベロープなしの配列**(`[]Activity`) | `DigestEnvelope`(`resource: "user_activity"`)。`digest` = `{user_id, since?, until?, limit?, total_count, activities, truncated}`。`activities` の各要素は Backlog の生データ(camelCase)のまま | ADR 0004 の決定(ページングで集めるツールは `truncated` を最上位に常に出す)。配列には載せられないため、互換を破ってエンベロープ化した |
+| `user_activity` の上限 | 期間指定時はページ数の上限なし | 期間指定時も 10 ページ(1,000 件)まで。超えたら `activities_truncated` と `truncated: true`。`limit` に届いて止まったときは `truncated: true` だが警告は出さない。`limit` は期間がないときだけ適用(logvalet と同じ) | ADR 0006。e2e `digest-tools.test.ts:379` |
+| `user_activity` の `project` | 受け取るが**何もしない**(説明文は client-side filter) | 同じく絞り込みには使わない。指定されたら warning `project_filter_ignored` を返して、無視したことを知らせる | 挙動は変えず、黙って無視しない。実装するかは残課題 |
+| `digest_unified` のアクティビティ | 取得関数が `maxId` を受け取らず、同じページを繰り返し取得。`until` 指定で新しい活動ばかりだと止まらない(結果が上限件数に届くまで) | `maxId` を直前のページの最後の id - 1 に進める。`since` に届いたら止め、`until` より新しいものは取得後に除く。1 ソース 5 ページ(500 件)まで。超えたら `activities_truncated` | **logvalet の不具合の修正**。再現テスト: `tools-digest-unified.test.ts`(100 件ちょうどのページ、`until` 指定)、e2e `digest-tools.test.ts:74,140`。変異(`maxId` を渡さない)で失敗することを確認 |
+| `digest_unified` の GetProject | MCP ハンドラと Builder で各キー 2 回。`projectId[]` に重複 | 各キー 1 回。`projectId[]` は重複なし | e2e `digest-tools.test.ts:74` |
+| `digest_unified` の `due_date` / `start_date` | スキーマにあるが**未使用** | `issue_list` と同じ解釈(`today` / `overdue` / `this-week` / `this-month` / 日付 / `A:B`)で `dueDateSince` などを課題一覧に渡す。説明文は logvalet のまま(`issue_list` と同じ解釈の語も受け付ける) | `tools-digest-unified.test.ts`、e2e `digest-tools.test.ts:217` |
+| `digest_unified` の `summary.by_user` | 常に空の `{}` | 課題の担当者と活動の実行者を**ユーザー ID**(数値の文字列)ごとに `{issues, activities}` で集計。scope のユーザーは 0 件でも載せる。担当者なしの課題は数えない | `tools-digest-unified.test.ts`、e2e `digest-tools.test.ts:74` |
+| `digest_unified` の課題・上限 | 課題を最大 10,000 件までページング。各入力の個数に上限なし。アクティビティはユーザー・プロジェクトごとに**並列** | 課題は 10 ページ(1,000 件)まで(`issues_truncated`)。`project_keys` 5・`team_ids` 3・`user_ids` 10・`issue_keys` 20 を超えたら `argument_error`。チーム展開後のユーザーも 10 人まで(`users_truncated`)。ソースは**直列** | ADR 0006。最悪 88 回 |
+| `digest_unified` の名前解決 | ユーザーは全員 GetUser | チームのメンバーに含まれるユーザーの名前はチームの応答から取り、GetUser を省く | 呼び出しの削減 |
+| `digest_unified` の部分失敗 | アクティビティはどれか 1 つ失敗すると**全部**捨てる。MCP ハンドラでは GetProject の失敗が全体エラー | ソースごとに warning `activities_fetch_failed` にして、取れた分を残す。GetProject / GetTeam / GetUser / GetIssue の失敗は warning(`project_fetch_failed` `team_fetch_failed` `user_fetch_failed`(名前は `user:<ID>`)`issue_fetch_failed`)。**指定した絞り込み(プロジェクト・ユーザー/チーム)が 1 つも引けなければ**(チームが引けてもメンバー 0 人の場合を含む。warning `team_has_no_members`)、範囲が広がらないよう課題もアクティビティも取らず、空の結果と warning を返す | ADR 0006 の「部分失敗は warning」。e2e `digest-tools.test.ts:236` |
+| `digest_unified` の並び | ソース順に連結 | 新しい順(id の降順)にまとめる | 決定的にする |
+| `space_digest` `document_digest` | — | 出力の形・サマリーの文言(全角括弧つきの headline など)は同じ。`document_digest` の添付は `{id, name, size}` の 3 項目だけ(logvalet と同じ)。`capacity_bytes` `used_bytes` は 0 のとき省略(logvalet の omitempty と同じ) | — |
+| `activity_digest` の `scope.since/until` | UTC の時刻 | オフセットつき(`timezone` 引数の暦日) | 上記の期間 |
+
 ## logvalet で見つけた不具合の疑い(logvalet は変更しない)
 
 - `shared_file_list` の `path` が未エスケープ(上記)。
@@ -104,6 +143,10 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 - `internal/analysis/my_tasks.go` は overdue（昨日まで）と upcoming（週の月〜日）の期間が重なる日の課題を両方に出す。`mode` が不正でも week として扱い、その値をそのまま返す。
 - `internal/analysis/timeline.go` は `max_comments` を取得後に切るだけで、コメントは 1 回（既定の 20 件）しか取らない。`internal/analysis/activity_stats.go` と `periodic.go` の `until` は 00:00 で切り、当日を含めない。
 - `internal/analysis/blocker.go` の `include_comments` は対象の全課題に 1 回ずつコメントを取りに行き（件数の上限なし）、失敗は黙って無視する。`internal/analysis/activity_stats.go` はページ数に上限がなく、未知の `scope` を space として扱う。
+- `internal/digest/activity_filter.go` の `FetchActivitiesWithDateFilter` を使う `internal/digest/unified.go` の取得関数は `maxID` を無視して同じページを繰り返し取得する。`until` より新しい活動ばかりが続くと、収集件数(上限 10,000)に届くまで止まらない(1 ソース 100 回超の呼び出し)。`digest_unified` はプロジェクト・ユーザー・チームの数に比例して並列に呼ぶため、最悪 2,000 回超になる。`FetchActivitiesWithDateFilter` 自体は `maxID` を使うが、呼び出し側の関数が受け取っていない。
+- `internal/mcp/tools_analysis.go` の `digest_unified` は `due_date` / `start_date` をスキーマに公開しているが、ハンドラが読んでいない。`summary.by_user` は常に空の map。`project_keys` の GetProject を MCP ハンドラと Builder で 2 回呼ぶ。
+- `internal/mcp/tools_user.go` の `user_activity` の `project` は、説明文に client-side filter とあるが何もしない。出力がエンベロープなしの配列で、上限に届いたかを伝えられない。
+- `internal/digest/search.go` の `search` は `project_keys` の GetProject が 1 つでも失敗すると全体エラー、キーなしでは全プロジェクトに Wiki を検索しに行く(プロジェクト数に比例)。
 - `plans/logbutler-m05-analysis-digest.md` の M05A の表（project_blockers の severity「前 2 つのどちらか→HIGH」）は、logvalet のコード（`high_priority_unassigned` と `overdue_open`）と食い違っている。
 
 ## M05.5: クライアント制御への移行による差分

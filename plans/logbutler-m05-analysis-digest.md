@@ -45,6 +45,12 @@
 
 **M05.5 での変更を反映（共通方針より優先）**: 環境変数 `LOGBUTLER_TIMEZONE` は廃止済み。日付を解釈するツール（digest_unified、user_activity、activity_digest）にはツール引数 `timezone`（M05.5 の `timezoneArg`、検証は registry が一括）を付け、`ctx.timezone` を読む。baseline 差分は `properties.timezone` の追加として許容リストに載せる。
 
+### M05.5 からの持ち越し（最初に片付ける。テストを先に）
+1. URL クエリの綴り違い対策: 未知のキーのうち、小文字化して `_` と `-` を除いたものが `readonly` / `toolsets` と一致するもの（例 `readonly`、`readOnly`、`READ_ONLY`、`read-only`、`tool_sets`）は 400（`invalid_query`、正しいキー名を案内）。それ以外の未知キーは従来どおり無視。ADR 0008 の「弱点」を更新
+2. 2026 レーンで `?read_only=true` の tools/list と tools/call 拒否を E2E に 1 件追加
+3. `test/e2e/write-tools.test.ts` の read_only ブロック確認を、エラー内容（ツール未登録）まで assert する形に強める
+4. README に「`read_only` の綴りを間違えると効かない。まぎらわしい綴りは 400 になる」旨の注記
+
 実装順: space_digest → document_digest → document_search → search → activity_digest → user_activity → digest_unified
 
 | ツール | 要点 | 意図した変更 |

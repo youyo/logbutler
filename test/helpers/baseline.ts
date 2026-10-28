@@ -152,6 +152,10 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
     "logbutler_digest_weekly",
     "logbutler_activity_stats",
     "logbutler_issue_timeline",
+    // M05B: 日付を解釈する digest 系
+    "logbutler_activity_digest",
+    "logbutler_user_activity",
+    "logbutler_digest_unified",
   ].map(
     (tool): AllowedChange => ({
       tool,

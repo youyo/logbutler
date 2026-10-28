@@ -36,8 +36,8 @@ src/auth/consent-page.ts      同意画面(クライアント由来の文字列�
 src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変換
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)
 src/mcp/args.ts              ツール共通の引数処理(zod ビルダー・ID 解決・日付・CSV・パスのエスケープ)
-src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`(定義だけ。ロジックは `src/analysis/`)
-src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)と、ツールごとの純粋関数
+src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)
+src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)・activity-range.ts(期間つきのアクティビティ取得。maxId を必ず進める)・snippet.ts(コードポイント単位の抜粋)と、ツールごとの関数(digest 系は DigestEnvelope)
 src/backlog/client.ts         Backlog API クライアント(request / download。本文の読み取りも同じ期限)
 test/unit/  test/e2e/  test/helpers/(tool-call.ts: 実クライアント + モック fetch でツールを呼ぶ)  test/fixtures/(logvalet の tools/list baseline。コピー元は README)  test/snapshots/(tools/list のスナップショット)
 ```

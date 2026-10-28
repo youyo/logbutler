@@ -122,7 +122,8 @@ export interface ToolDefinition {
   readonly handler: (args: unknown, ctx: ToolContext) => Promise<unknown>;
 }
 
-const TOOL_NAME = /^logbutler_[a-z][a-z0-9]*(_[a-z0-9]+)+$/;
+/** `logbutler_<resource>_<action>`。例外は logvalet の baseline にある `logbutler_search`(action なし)だけ。 */
+const TOOL_NAME = /^logbutler_(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|search)$/;
 
 export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>): ToolDefinition {
   if (!TOOL_NAME.test(input.name)) {
@@ -147,13 +148,42 @@ export interface ToolConfig {
   readOnly: boolean;
 }
 
+const CONFIG_KEYS = ["read_only", "toolsets"] as const;
+/** 小文字にして `_` と `-` を除く(`readOnly` `READ_ONLY` `read-only` を同じ綴りとして扱う)。 */
+const squash = (key: string) => key.toLowerCase().replace(/[_\-\s]/g, "");
+/** 設定キーの綴り違いとみなす接頭辞(`toolset` `tools` `readonlly` `readOnlyMode` など)。 */
+const CONFIG_KEY_PREFIXES = ["read", "tool"] as const;
+
+/**
+ * `readonly` `readOnly` `read-only` `tool_sets` `toolset` `readonlly` のように、squash 後に
+ * `read` か `tool` で始まる未知のキーは QueryError にする。無視すると、読み取り専用のつもりで
+ * 書き込み可能なまま接続してしまう。それ以外の未知のキー(Portal の `optimize_context` など)は
+ * 従来どおり無視する。`ro` `mode` のような短い別名は対象外(ADR 0008)。
+ */
+function rejectMisspelledKeys(params: URLSearchParams): void {
+  for (const key of new Set(params.keys())) {
+    if ((CONFIG_KEYS as readonly string[]).includes(key)) continue;
+    const squashed = squash(key);
+    if (CONFIG_KEY_PREFIXES.some((p) => squashed.startsWith(p))) {
+      const intended = CONFIG_KEYS.find((k) => squash(k) === squashed);
+      throw new QueryError(
+        intended
+          ? `クエリのキー "${key}" は綴り違い。正しいキーは "${intended}"`
+          : `クエリのキー "${key}" は綴り違いの疑い。正しいキーは "read_only" と "toolsets"`,
+      );
+    }
+  }
+}
+
 /**
  * /mcp の URL クエリからツール設定を作る(`?toolsets=issue,wiki&read_only=true`)。
  * 公開するツールは tools/list の時点で決まるため、ツール引数ではなく接続 URL で決める(ADR 0008)。
  * 未知の toolset 名や読めない真偽値は QueryError にする(typo で黙って全ツールが消えたり、
- * 読み取り専用のつもりで書き込めたりしないため)。関係のないクエリは無視する。
+ * 読み取り専用のつもりで書き込めたりしないため)。`read_only` / `toolsets` のまぎらわしい綴り違いも QueryError。
+ * それ以外の関係のないクエリは無視する。
  */
 export function parseToolConfig(params: URLSearchParams): ToolConfig {
+  rejectMisspelledKeys(params);
   const names = params
     .getAll("toolsets")
     .flatMap((v) => v.split(","))

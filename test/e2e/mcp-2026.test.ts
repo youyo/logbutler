@@ -53,7 +53,7 @@ describe("E2E 12-1: 2026-07-28 レーン(initialize なし)", () => {
     const res = await modernRequest(token, "tools/list");
     expect(res.status).toBe(200);
     const rpc = await readRpc(res);
-    expect(rpc.result?.tools?.length).toBe(64);
+    expect(rpc.result?.tools?.length).toBe(71);
     // 2026 版の応答だけが持つ印(旧版レーンには付かない)
     expect(JSON.stringify(rpc.result)).toContain("io.modelcontextprotocol/serverInfo");
   });
@@ -85,6 +85,38 @@ describe("E2E 12-1: 2026-07-28 レーン(initialize なし)", () => {
     const names = (await readRpc(res)).result?.tools?.map((t) => t.name) ?? [];
     expect(names).toHaveLength(8);
     expect(names.every((n) => n.startsWith("logbutler_wiki_"))).toBe(true);
+  });
+});
+
+describe("E2E 12-1b: 2026-07-28 レーンの read_only", () => {
+  it("?read_only=true で tools/list から書き込み・破壊的ツールが消え、tools/call は実行されない", async () => {
+    const { token, calls } = await loggedIn();
+    const url = `${MCP_URL}?read_only=true`;
+    const list = await readRpc(await modernRequest(token, "tools/list", {}, { url }));
+    const names = list.result?.tools?.map((t) => t.name) ?? [];
+    expect(names).toContain("logbutler_issue_list");
+    expect(names).not.toContain("logbutler_issue_create");
+    expect(names).not.toContain("logbutler_watching_delete");
+    expect(
+      (list.result?.tools ?? []).every(
+        (t) => (t.annotations as { readOnlyHint?: boolean } | undefined)?.readOnlyHint === true,
+      ),
+    ).toBe(true);
+
+    const res = await modernRequest(
+      token,
+      "tools/call",
+      { name: "logbutler_watching_delete", arguments: { watching_id: 5 } },
+      { url },
+    );
+    const rpc = await readRpc(res);
+    expect(rpc.error).toEqual({
+      code: -32602,
+      message: "Tool logbutler_watching_delete not found",
+    });
+    expect(rpc.result).toBeUndefined();
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+    expect(calls.some((c) => c.url.includes("/watchings"))).toBe(false);
   });
 });
 
@@ -188,7 +220,7 @@ describe("E2E 12-3: 旧版レーン(initialize あり)も動く", () => {
       const { initRpc, rpc } = await legacyFlow(version);
       expect(initRpc.result?.protocolVersion).toBe(version);
       const list = await rpc(2, "tools/list", {});
-      expect(list.result?.tools?.length).toBe(64);
+      expect(list.result?.tools?.length).toBe(71);
       // 旧版の応答には 2026 版の印が付かない
       expect(JSON.stringify(list.result)).not.toContain("io.modelcontextprotocol/serverInfo");
       const called = await rpc(3, "tools/call", { name: "logbutler_user_me", arguments: {} });

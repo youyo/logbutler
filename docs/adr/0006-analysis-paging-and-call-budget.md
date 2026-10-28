@@ -1,6 +1,6 @@
 # ADR 0006: 分析ツールのページングと API 呼び出しの予算
 
-- 状態: 採用(M05A)
+- 状態: 採用(M05A)。M05B で digest 系 6 個と user_activity を追加
 - 日付: 2026-10-28(全件ページング・until の当日を含める・完了集合は、ロードマップ「決定済み事項」のユーザー決定)
 
 ## 背景
@@ -51,7 +51,42 @@ logvalet と同じく、必須でない取得の失敗(プロジェクト、課�
 | `issue_timeline` | GetIssue 1 + コメント PAGES + アクティビティ `max_activity_pages`(≤ 10) | 21 | `tools-analysis-timeline.test.ts:320,323` |
 | `activity_stats` | (scope=user の "me": GetMyself 1) + アクティビティ PAGES | 11 | `tools-analysis-activity-stats.test.ts:150,153,171` |
 
-上限に届いたら `BacklogCallLimitError`(`api_error`、retryable でない)で止まるが、上の式はページ上限で先に止まる値なので、
+#### M05B: digest 系 6 個 + user_activity
+
+追加の定数: `U` = `UNIFIED_MAX_USERS` = 10、`T` = `UNIFIED_MAX_TEAMS` = 3、`K` = `UNIFIED_MAX_ISSUE_KEYS` = 20、
+`A` = `UNIFIED_ACTIVITY_PAGES` = 5(`digest_unified` で 1 ソースあたりのアクティビティのページ数)、
+`W` = `MAX_SEARCH_WIKI_PROJECTS` = 10(`search` の Wiki 検索の対象プロジェクト数)。
+
+| ツール | 最悪ケースの式 | maxApiCalls | 固定するテスト |
+|---|---|---|---|
+| `space_digest` | GetSpace 1 + GetSpaceDiskUsage 1 | 2 | unit `tools-digest-document.test.ts:40,95` |
+| `document_digest` | GetDocument 1 + ListProjects 1 + 添付 1 | 3 | `tools-digest-document.test.ts:130,237` |
+| `document_search` | project_keys: GetProject P + 検索 1(URL 用の ListProjects は呼ばない)。キーなし: 検索 1 + ListProjects 1 = 2 | 6 | `tools-digest-document.test.ts:469,483` |
+| `search` | キーあり: GetProject P + 課題 1 + ドキュメント 1 + Wiki P = 12。キーなし: ListProjects 1 + 課題 1 + ドキュメント 1 + Wiki W = 13 | 13 | `tools-digest-search.test.ts:310,370,385` / e2e `digest-tools.test.ts:306` |
+| `activity_digest` | アクティビティ 1(`limit` ≤ 100 の 1 ページ) | 1 | `tools-digest-activity.test.ts:53,223` |
+| `user_activity` | ("me": GetMyself 1) + アクティビティ PAGES(10) | 11 | `tools-digest-activity.test.ts:414,426` / e2e `digest-tools.test.ts:379` |
+| `digest_unified` | GetTeam T + GetProject P + GetUser U + max(課題 PAGES, GetIssue K) + max(U, P) × A = 3 + 5 + 10 + 20 + 10 × 5 | 88 | `tools-digest-unified.test.ts:452,488` |
+
+`digest_unified` の最悪ケース(88)は、チーム 3・プロジェクト 5・ユーザー 10(チームのメンバーに含まれない ID)・課題キー 20 を
+すべて指定し、ユーザーごとのアクティビティが 5 ページ満杯で続く場合。テストはちょうど 88 回で終わることを確かめる。
+logvalet は同じツールが最悪 2,000 回超(課題 10,000 件のページング + 並列のアクティビティ)だった。
+
+M05B の上限で止まったときの扱い:
+
+- **`truncated`**: ページングで集める `search`(Wiki のプロジェクト数の上限)、`user_activity`、`digest_unified` は、`digest` の最上位に
+  `truncated` を常に出す(ADR 0004)。`activity_digest` は 1 回の取得だが `limit` 件ちょうど取れて期間の端(`since`)に届いていないとき
+  `truncated: true`(警告は出さない。`limit` は呼び出し側の指定)。単純な取得のツール(`space_digest` `document_digest`
+  `document_search`)は `truncated` を持たない。
+- **warning の code**: `wiki_search_truncated`(search)、`activities_truncated`(user_activity / digest_unified)、
+  `issues_truncated`・`users_truncated`・`projects_truncated`(digest_unified)。`retryable` は false。
+  チームが引けたがメンバー 0 人のときも空の結果を返し、理由を `team_has_no_members`(digest_unified)で伝える。
+- **絞り込みを失わない**: `search` の `project_keys` が全部引けない、`digest_unified` の `project_keys` / `user_ids` `team_ids` が
+  全部引けないときは、残りの条件だけで範囲が広がる(スペース全体、プロジェクト全員)のを避けて、空の結果と warning を返す。
+  一部だけ引けた場合は、引けた分で進めて warning を出す。
+- **`user_activity` の `limit`**: logvalet と同じく期間(`since` / `until`)がないときだけ使う。期間があれば期間内を
+  PAGES(10 ページ = 1,000 件)まで全部取り、超えたら `activities_truncated`。
+
+上に届いたら `BacklogCallLimitError`(`api_error`、retryable でない)で止まるが、上の式はページ上限で先に止まる値なので、
 通常は `truncated` + warning になり、エラーにはならない(テストが「ちょうど式の回数で終わる」ことを確認)。
 式の PAGES を超えるのは、リトライ(429)を含むときだけ。リトライが重なると上限に達してエラーになりうる。それは受け入れる。
 
@@ -64,7 +99,18 @@ logvalet と同じく、必須でない取得の失敗(プロジェクト、課�
   `comment_check_truncated` の warning と `truncated: true` を出す(AI が検出漏れの可能性を知れる)。取得は `count=1&order=desc`
   (使うのは最新コメントだけ)。確認の失敗は握りつぶさず、`comments_fetch_failed` を 1 件にまとめる(logvalet は黙って無視していた)。
 - **`max_activity_pages`(timeline)は 1〜10**。0 以下は既定の 5。11 以上は `argument_error`。
+- **M05B**: `search` / `document_search` の `project_keys` は 5 個まで(P)、`search` の Wiki 検索は先頭 10 プロジェクトまで(W)。
+  `digest_unified` の `project_keys` 5 個・`team_ids` 3 個・`user_ids` 10 個・`issue_keys` 20 個、チーム展開後のユーザーも 10 人まで
+  (超えた分は `users_truncated`)。アクティビティは 1 ソースあたり 5 ページ(500 件)まで。超過の入力は `argument_error`(Backlog を呼ばない)。
+  チームのメンバーに含まれるユーザーの名前はチームの応答から取り、GetUser を省く。
 - この 2 つの数(5 と 50)は判断で決めた。変えるときは `src/analysis/budget.ts` の定数と、上の表・テストを合わせて変える。
+
+### アクティビティの期間つき取得(`src/analysis/activity-range.ts`)
+
+`user_activity` と `digest_unified` が共有する。新しい順に `maxId` のカーソル(直前のページの最小 id - 1)で遡り、`since` より古い
+ものに届いたら止め、`until` より新しいものは取得後に除く。logvalet の `FetchActivitiesWithDateFilter` は取得関数が `maxId` を
+受け取らず、同じページを繰り返し取得した(100 件ちょうどのページが続くと、`until` 指定で新しい活動ばかりのとき止まらない)。
+ここではカーソルを必ず進め、ページ数に上限を付ける。`activity_stats` は同じ考え方で先に実装済み(M05A)。
 
 ### `project_health` は課題一覧を 1 回だけ取る
 

@@ -35,6 +35,10 @@ export interface AnalysisEnvelope<T> {
   analysis: T;
 }
 
+/** Backlog スペースの Web の URL(`https://<host>`)。ホスト不明なら空文字(URL を組み立てない)。 */
+export const baseUrlOf = (ctx: Pick<ToolContext, "spaceHost">): string =>
+  ctx.spaceHost === "" ? "" : `https://${ctx.spaceHost}`;
+
 /** 空でも warnings は `[]`。profile は Logbutler にはないので空文字(logvalet はキーを落とさない)。 */
 export function analysisEnvelope<T>(
   ctx: Pick<ToolContext, "now" | "spaceHost">,
@@ -48,10 +52,32 @@ export function analysisEnvelope<T>(
     generated_at: ctx.now().toISOString(),
     profile: "",
     space: ctx.spaceHost.split(".")[0] ?? "",
-    base_url: ctx.spaceHost === "" ? "" : `https://${ctx.spaceHost}`,
+    base_url: baseUrlOf(ctx),
     warnings,
     analysis,
   };
+}
+
+/** logvalet の `DigestEnvelope`(M05B の digest 系)。`AnalysisEnvelope` と同じで、最後のキーだけ `digest`。 */
+export interface DigestEnvelope<T> {
+  schema_version: "1";
+  resource: string;
+  generated_at: string;
+  profile: string;
+  space: string;
+  base_url: string;
+  warnings: Warning[];
+  digest: T;
+}
+
+export function digestEnvelope<T>(
+  ctx: Pick<ToolContext, "now" | "spaceHost">,
+  resource: string,
+  digest: T,
+  warnings: Warning[] = [],
+): DigestEnvelope<T> {
+  const { analysis: _omit, ...head } = analysisEnvelope(ctx, resource, null, warnings);
+  return { ...head, digest };
 }
 
 /**

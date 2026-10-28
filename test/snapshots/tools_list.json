@@ -1,5 +1,41 @@
 [
   {
+    "name": "logbutler_activity_digest",
+    "description": "Generate an activity digest for a space or project",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Max number of activities (default 20)",
+          "type": "number"
+        },
+        "project": {
+          "description": "Filter by project key",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
+        "until": {
+          "description": "End date (YYYY-MM-DD)",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "アクティビティダイジェスト生成"
+    }
+  },
+  {
     "name": "logbutler_activity_list",
     "description": "List activities by scope (space, project, or user)",
     "inputSchema": {
@@ -114,6 +150,60 @@
     }
   },
   {
+    "name": "logbutler_digest_unified",
+    "description": "Generate a unified digest across projects, users, teams, or issues",
+    "inputSchema": {
+      "properties": {
+        "due_date": {
+          "description": "Due date filter (YYYY-MM-DD or YYYY-MM-DD:YYYY-MM-DD)",
+          "type": "string"
+        },
+        "issue_keys": {
+          "description": "Comma-separated issue keys",
+          "type": "string"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "Start date filter (YYYY-MM-DD or YYYY-MM-DD:YYYY-MM-DD)",
+          "type": "string"
+        },
+        "team_ids": {
+          "description": "Comma-separated team IDs",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
+        "until": {
+          "description": "End date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "user_ids": {
+          "description": "Comma-separated user IDs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "統合ダイジェスト生成"
+    }
+  },
+  {
     "name": "logbutler_digest_weekly",
     "description": "Generate weekly periodic digest for a project (completed/started/blocked)",
     "inputSchema": {
@@ -185,6 +275,28 @@
     }
   },
   {
+    "name": "logbutler_document_digest",
+    "description": "Generate a digest for a document",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ドキュメントダイジェスト生成"
+    }
+  },
+  {
     "name": "logbutler_document_get",
     "description": "Get document by document ID",
     "inputSchema": {
@@ -234,6 +346,52 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "ドキュメント一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_document_search",
+    "description": "Search documents by keyword within a Backlog space",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max results (1-100, default 100)",
+          "type": "number"
+        },
+        "detail": {
+          "description": "Verbosity: snippet | meta | full (default: snippet)",
+          "type": "string"
+        },
+        "keyword": {
+          "description": "Search keyword",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Pagination offset (default 0)",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order: asc | desc",
+          "type": "string"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys to filter (e.g. PROJ1,PROJ2)",
+          "type": "string"
+        },
+        "sort": {
+          "description": "Sort field: created | updated",
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyword"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ドキュメント検索"
     }
   },
   {
@@ -1209,6 +1367,44 @@
     }
   },
   {
+    "name": "logbutler_search",
+    "description": "Search issues, documents, and wiki pages by keyword",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max results per resource (1-100, default 20)",
+          "type": "number"
+        },
+        "detail": {
+          "description": "Verbosity: snippet | meta (default: snippet)",
+          "type": "string"
+        },
+        "keyword": {
+          "description": "Search keyword",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Pagination offset per resource (default 0)",
+          "type": "number"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys to filter (optional)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyword"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "横断検索"
+    }
+  },
+  {
     "name": "logbutler_shared_file_download",
     "description": "Download a shared file (max 20MB, returned as base64)",
     "inputSchema": {
@@ -1267,6 +1463,21 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "共有ファイル一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_space_digest",
+    "description": "Generate a digest for the entire Backlog space",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "スペースダイジェスト生成"
     }
   },
   {
@@ -1406,6 +1617,52 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "プロジェクトチーム一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_user_activity",
+    "description": "List activities for a specific user",
+    "inputSchema": {
+      "properties": {
+        "activity_type_ids": {
+          "description": "Comma-separated activity type IDs",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Max number of activities (default 20)",
+          "type": "number"
+        },
+        "project": {
+          "description": "Filter by project key (client-side filter)",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA time zone name used to interpret dates such as 'today' (e.g. Asia/Tokyo, UTC). Default: Asia/Tokyo",
+          "type": "string"
+        },
+        "until": {
+          "description": "End date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User ID or 'me' for current user",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ユーザーアクティビティ取得"
     }
   },
   {

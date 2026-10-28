@@ -11,6 +11,7 @@ import { type Warning, warningFromError } from "./envelope";
 /** 分析に使う Backlog の課題(生データの camelCase のまま、使う項目だけ)。 */
 export interface BacklogIssue {
   id: number;
+  projectId?: number;
   issueKey: string;
   summary: string;
   description?: string | null;

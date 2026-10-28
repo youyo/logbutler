@@ -31,6 +31,13 @@ const TZ_TOOLS: Record<
     respond: { "GET /projects/P": { id: 10 }, "GET /issues": [] },
   },
   logbutler_activity_stats: { args: {}, respond: { "GET /space/activities": [] } },
+  // M05B
+  logbutler_activity_digest: { args: {}, respond: { "GET /space/activities": [] } },
+  logbutler_user_activity: { args: { user_id: "5" }, respond: { "GET /users/5/activities": [] } },
+  logbutler_digest_unified: {
+    args: { since: "2026-10-01" },
+    respond: { "GET /issues": [], "GET /space/activities": [] },
+  },
   logbutler_issue_timeline: {
     args: { issue_key: "P-1" },
     respond: {
@@ -46,7 +53,7 @@ describe("timezone 引数", () => {
     expect(DEFAULT_TIMEZONE).toBe("Asia/Tokyo");
   });
 
-  it("日付を解釈する 6 ツールだけが、任意の文字列引数 timezone を持つ", () => {
+  it("日付を解釈する 9 ツールだけが、任意の文字列引数 timezone を持つ", () => {
     const withTz = ALL_TOOLS.filter((t) => "timezone" in t.inputSchema.shape).map((t) => t.name);
     expect(withTz.sort()).toEqual(Object.keys(TZ_TOOLS).sort());
     for (const t of ALL_TOOLS.filter((t) => withTz.includes(t.name))) {

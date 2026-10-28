@@ -66,9 +66,11 @@ mise run dev            # wrangler dev
 |---|---|---|
 | `toolsets` | `/mcp` の URL クエリ | 公開するツールのグループ(カンマ区切り、既定 `all`)。例 `/mcp?toolsets=issue,wiki`。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` |
 | `read_only` | `/mcp` の URL クエリ | `true` で書き込み・破壊的ツールを公開しない(既定 `false`)。例 `/mcp?toolsets=issue&read_only=true` |
-| `timezone` | ツール引数 | 「今日」「今週」の基準になる IANA 名(省略時 `Asia/Tokyo`)。`issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` にある |
+| `timezone` | ツール引数 | 「今日」「今週」の基準になる IANA 名(省略時 `Asia/Tokyo`)。`issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` `activity_digest` `user_activity` `digest_unified` にある |
 
 不正なクエリ値(未知の toolset 名、`read_only` が `true`/`false` 以外)は 400 で、理由を本文に返す。不正な `timezone` は `argument_error`。
+
+**`read_only` の綴りを間違えると効かない**(未知のクエリは無視されるため)。そこで、まぎらわしい綴り(`readonly` `readOnly` `READ_ONLY` `read-only`、`tool_sets` `Toolsets` など。小文字にして `_` と `-` を除くと `read_only` / `toolsets` に一致するもの)は 400 にして、正しいキー名を案内する。それ以外の未知のクエリは従来どおり無視する。
 詳細と未検証の前提は ADR 0008。
 
 ローカルでは `.dev.vars.example` をコピーして `.dev.vars` を作る(コミットしない)。
