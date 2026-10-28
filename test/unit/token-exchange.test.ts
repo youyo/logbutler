@@ -18,7 +18,6 @@ function propsExpiringIn(seconds: number): GrantProps {
     backlogRefreshToken: "old-rt",
     backlogExpiresAt: NOW + seconds * 1000,
     backlogUserId: 42,
-    accessEmail: "alice@example.com",
   };
 }
 
@@ -57,7 +56,6 @@ describe("tokenExchangeCallback", () => {
       backlogRefreshToken: "new-rt",
       backlogExpiresAt: NOW + 3600 * 1000,
       backlogUserId: 42,
-      accessEmail: "alice@example.com",
     });
     expect(result?.accessTokenProps).toEqual(result?.newProps);
     expect(result?.accessTokenTTL).toBe(MCP_ACCESS_TOKEN_TTL_SECONDS);

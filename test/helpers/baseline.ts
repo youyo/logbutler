@@ -135,6 +135,68 @@ export function formatCompareResult(r: CompareResult): string {
 }
 
 /**
+ * M06: 応答サイズの上限(ツール引数 max_response_tokens)を付けた、logvalet にもある読み取りツール 55 個。
+ * ReadOnly のうちダウンロード系 2 個(issue_attachment_download / shared_file_download)を除く。
+ */
+export const RESPONSE_LIMIT_TOOLS: readonly string[] = [
+  "logbutler_activity_digest",
+  "logbutler_activity_list",
+  "logbutler_activity_stats",
+  "logbutler_digest_daily",
+  "logbutler_digest_unified",
+  "logbutler_digest_weekly",
+  "logbutler_document_digest",
+  "logbutler_document_get",
+  "logbutler_document_list",
+  "logbutler_document_search",
+  "logbutler_document_tree",
+  "logbutler_issue_attachment_list",
+  "logbutler_issue_comment_list",
+  "logbutler_issue_context",
+  "logbutler_issue_get",
+  "logbutler_issue_list",
+  "logbutler_issue_related_list",
+  "logbutler_issue_stale",
+  "logbutler_issue_timeline",
+  "logbutler_issue_triage_materials",
+  "logbutler_meta_categories",
+  "logbutler_meta_custom_field",
+  "logbutler_meta_issue_types",
+  "logbutler_meta_statuses",
+  "logbutler_meta_version",
+  "logbutler_my_tasks",
+  "logbutler_project_blockers",
+  "logbutler_project_conventions",
+  "logbutler_project_get",
+  "logbutler_project_health",
+  "logbutler_project_list",
+  "logbutler_search",
+  "logbutler_shared_file_list",
+  "logbutler_space_digest",
+  "logbutler_space_disk_usage",
+  "logbutler_space_info",
+  "logbutler_team_get",
+  "logbutler_team_list",
+  "logbutler_team_project",
+  "logbutler_user_activity",
+  "logbutler_user_get",
+  "logbutler_user_list",
+  "logbutler_user_me",
+  "logbutler_user_workload",
+  "logbutler_watching_count",
+  "logbutler_watching_get",
+  "logbutler_watching_list",
+  "logbutler_wiki_attachment_list",
+  "logbutler_wiki_count",
+  "logbutler_wiki_get",
+  "logbutler_wiki_history",
+  "logbutler_wiki_list",
+  "logbutler_wiki_sharedfile_list",
+  "logbutler_wiki_stars",
+  "logbutler_wiki_tags",
+];
+
+/**
  * logvalet の差分として許容している項目。M03 以降、移植時に差分が出たらここへ理由つきで足す。
  * M04 で issue_attachment_upload の file_paths 削除を足した（docs/tool-diff-from-logvalet.md にも記載）。
  */
@@ -164,9 +226,23 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
         "timezone 引数（任意・IANA 名・省略時 Asia/Tokyo）の追加。タイムゾーンの環境変数を廃止し、「今日」の基準をクライアントが呼び出しごとに決められるようにした（M05.5 の決定済み事項）。Workers は UTC で動くため logvalet のローカル時刻依存の代わりに必要。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.timezone の追加だけに固定している。",
     }),
   ),
+  ...RESPONSE_LIMIT_TOOLS.map(
+    (tool): AllowedChange => ({
+      tool,
+      fields: ["inputSchema"],
+      reason:
+        "max_response_tokens 引数(任意・整数・0 で無効・既定 50000)の追加。巨大な応答で AI のコンテキストを溢れさせない最後の安全網で、環境変数ではなくクライアントが呼び出しごとに決める（M06 の決定済み事項）。ダウンロード系 2 個は対象外。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.max_response_tokens の追加だけに固定している。",
+    }),
+  ),
 ];
+
 export const ALLOWED_MISSING: readonly string[] = [];
-export const ALLOWED_EXTRA: readonly string[] = [];
+/** M06: logvalet に無く、Nulab 公式 MCP から取り込んだ 3 ツール(docs/tool-diff-from-logvalet.md)。 */
+export const ALLOWED_EXTRA: readonly string[] = [
+  "logbutler_notification_list",
+  "logbutler_notification_count",
+  "logbutler_project_users",
+];
 
 export function compareWithBaseline(
   actual: readonly McpToolListing[],

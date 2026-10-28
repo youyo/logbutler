@@ -3,10 +3,8 @@
  * Worker 全体への HTTP で固定する(M05.5)。どのレーンを通っているかをテストごとに明示する。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   BACKLOG_TOKEN,
   CLIENT_REDIRECT,
@@ -25,14 +23,13 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const myself = () => jsonResponse({ id: 42, userId: "alice", name: "Alice" });
 
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0] = {}) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const tokens = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return {
@@ -53,7 +50,7 @@ describe("E2E 12-1: 2026-07-28 レーン(initialize なし)", () => {
     const res = await modernRequest(token, "tools/list");
     expect(res.status).toBe(200);
     const rpc = await readRpc(res);
-    expect(rpc.result?.tools?.length).toBe(71);
+    expect(rpc.result?.tools?.length).toBe(74);
     // 2026 版の応答だけが持つ印(旧版レーンには付かない)
     expect(JSON.stringify(rpc.result)).toContain("io.modelcontextprotocol/serverInfo");
   });
@@ -220,7 +217,7 @@ describe("E2E 12-3: 旧版レーン(initialize あり)も動く", () => {
       const { initRpc, rpc } = await legacyFlow(version);
       expect(initRpc.result?.protocolVersion).toBe(version);
       const list = await rpc(2, "tools/list", {});
-      expect(list.result?.tools?.length).toBe(71);
+      expect(list.result?.tools?.length).toBe(74);
       // 旧版の応答には 2026 版の印が付かない
       expect(JSON.stringify(list.result)).not.toContain("io.modelcontextprotocol/serverInfo");
       const called = await rpc(3, "tools/call", { name: "logbutler_user_me", arguments: {} });

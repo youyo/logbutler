@@ -159,3 +159,25 @@ toolset: `space_digest` `document_digest` `activity_digest` `digest_unified` は
 ## 移植していないもの
 
 - `StaleConfig.StatusDays`(ステータス別の stale 閾値)。logvalet の Go ライブラリ側にはあるが MCP のツール引数には公開されておらず、Logbutler にも持ち込んでいない(`issue_stale` / `project_health` は全ステータス共通の `days` だけ)。
+
+## M06: 追加ツールと応答サイズの上限
+
+### 追加ツール(logvalet に無い。Nulab 公式 `nulab/backlog-mcp-server` v0.23.3 から取り込み)
+
+`test/helpers/baseline.ts` の `ALLOWED_EXTRA` に載せている。すべて読み取り専用(ReadOnly)。
+
+| ツール | toolset | 引数 | Backlog API | 返却 |
+|---|---|---|---|---|
+| `logbutler_notification_list` | notification | `min_id` `max_id` `count`(1〜100) `order`(asc/desc)、すべて任意 | `GET /notifications`(minId, maxId, count, order) | 生データ(camelCase) |
+| `logbutler_notification_count` | notification | `already_read` `resource_already_read`(任意。未指定なら送らない) | `GET /notifications/count`(alreadyRead, resourceAlreadyRead) | `{"count": n}` |
+| `logbutler_project_users` | project | `project_key`(必須) `exclude_group_members`(任意) | `GET /projects/{key}/users`(excludeGroupMembers) | 生データ |
+
+取り込まないと決めたもの: 通知の既読化・未読リセット、優先度・完了理由一覧、`fields`、文字数での切り詰め、Git / PR、Wiki 書き込み、delete_issue、プロジェクト等の編集。
+`notification_list` は既読化しない(Backlog の画面で確認する)。
+
+### 応答サイズの上限(ADR 0007)
+
+| 対象 | logvalet | Logbutler | 理由 |
+|---|---|---|---|
+| 読み取りツール 55 個(ダウンロード系 2 個を除く)の `inputSchema` | `max_response_tokens` なし | 任意の整数引数 `max_response_tokens`(省略時 50000、0 で無効)を追加。超えたら切り詰めず `response_too_large` | 巨大な応答で AI のコンテキストを溢れさせない最後の安全網。フラグはクライアントが決める(2026-10-28 ユーザー決定)。`ALLOWED_CHANGES` に理由つきで載せ、`tools-list-snapshot.test.ts` が差分を `properties.max_response_tokens` の追加だけに固定している(`timezone` を持つ 9 ツールは両方) |
+| エラーコード | `response_too_large` なし | 追加(retryable: false) | ADR 0004 |

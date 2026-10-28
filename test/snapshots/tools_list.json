@@ -8,6 +8,10 @@
           "description": "Max number of activities (default 20)",
           "type": "number"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project": {
           "description": "Filter by project key",
           "type": "string"
@@ -48,6 +52,10 @@
           "description": "Max number of activities (default 20, max 100)",
           "type": "number"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "order": {
           "description": "Sort order: asc or desc (default: desc)",
           "type": "string"
@@ -76,6 +84,10 @@
     "description": "Get activity statistics (by type, actor, date, hour, patterns)",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (required when scope=project)",
           "type": "string"
@@ -120,6 +132,10 @@
     "description": "Generate daily periodic digest for a project (completed/started/blocked)",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"
@@ -161,6 +177,10 @@
         "issue_keys": {
           "description": "Comma-separated issue keys",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "project_keys": {
           "description": "Comma-separated project keys",
@@ -208,6 +228,10 @@
     "description": "Generate weekly periodic digest for a project (completed/started/blocked)",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"
@@ -282,6 +306,10 @@
         "document_id": {
           "description": "Document ID",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -304,6 +332,10 @@
         "document_id": {
           "description": "Document ID",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -325,6 +357,10 @@
       "properties": {
         "count": {
           "description": "Max number of documents",
+          "type": "number"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
           "type": "number"
         },
         "offset": {
@@ -365,6 +401,10 @@
           "description": "Search keyword",
           "type": "string"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "offset": {
           "description": "Pagination offset (default 0)",
           "type": "number"
@@ -399,6 +439,10 @@
     "description": "Get the document tree for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -479,6 +523,10 @@
         "issue_key": {
           "description": "Issue key (e.g. PROJECT-123)",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -576,6 +624,10 @@
           "description": "Issue key (e.g. PROJECT-123)",
           "type": "string"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "offset": {
           "description": "Offset for pagination",
           "type": "number"
@@ -649,6 +701,10 @@
         "issue_key": {
           "description": "Issue key (e.g. PROJ-123)",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -748,6 +804,10 @@
         "issue_key": {
           "description": "Issue key (e.g. PROJECT-123)",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -782,6 +842,10 @@
         "keyword": {
           "description": "Keyword search against Backlog issues",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "offset": {
           "description": "Offset for pagination",
@@ -902,6 +966,10 @@
         "issue_key": {
           "description": "Issue key (e.g. PROJECT-123)",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -928,6 +996,10 @@
         "exclude_status": {
           "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "project_keys": {
           "description": "Comma-separated project keys (e.g. 'PROJ1,PROJ2')",
@@ -967,6 +1039,10 @@
           "description": "Max number of comments to include (0 = all, default 0)",
           "type": "number"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "since": {
           "description": "Filter events since date (YYYY-MM-DD)",
           "type": "string"
@@ -1004,6 +1080,10 @@
         "issue_key": {
           "description": "Issue key (e.g. PROJ-123)",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         }
       },
       "required": [
@@ -1106,6 +1186,10 @@
     "description": "List categories for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1128,6 +1212,10 @@
     "description": "List custom field definitions for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1150,6 +1238,10 @@
     "description": "List issue types for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1172,6 +1264,10 @@
     "description": "List statuses for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1194,6 +1290,10 @@
     "description": "List versions for a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1216,6 +1316,10 @@
     "description": "Get your personal task dashboard: overdue, upcoming, and watched issues with stale/overdue signals",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "mode": {
           "description": "View mode: 'week' (this week Mon-Sun, default) or 'next' (next 4-6 business days)",
           "type": "string"
@@ -1240,6 +1344,74 @@
     }
   },
   {
+    "name": "logbutler_notification_count",
+    "description": "Get the number of notifications for the authenticated user. Returns {\"count\": n}. Read-only.",
+    "inputSchema": {
+      "properties": {
+        "already_read": {
+          "description": "Count only notifications that are already read (true) or unread (false)",
+          "type": "boolean"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
+        "resource_already_read": {
+          "description": "Count only notifications whose resource (issue, etc.) is already read (true) or unread (false)",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "通知件数取得"
+    }
+  },
+  {
+    "name": "logbutler_notification_list",
+    "description": "List notifications for the authenticated user. Read-only: this does not mark notifications as read (check them in the Backlog UI).",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of items (1-100, default: Backlog default)",
+          "type": "number"
+        },
+        "max_id": {
+          "description": "Return notifications with an ID less than this value",
+          "type": "number"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
+        "min_id": {
+          "description": "Return notifications with an ID greater than this value",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order: asc or desc (default: desc)",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "通知一覧取得"
+    }
+  },
+  {
     "name": "logbutler_project_blockers",
     "description": "Detect project blocker issues (high priority unassigned, long in-progress, overdue)",
     "inputSchema": {
@@ -1255,6 +1427,10 @@
         "include_comments": {
           "description": "Enable blocked-by-keyword detection via latest comment (default false)",
           "type": "boolean"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "project_keys": {
           "description": "Comma-separated project keys (e.g. 'PROJ1,PROJ2')",
@@ -1278,6 +1454,10 @@
     "description": "Show the operating conventions adopted by a project (rule issue), with a glossary",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1300,6 +1480,10 @@
     "description": "Get project details by project key",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJECT)",
           "type": "string"
@@ -1334,6 +1518,10 @@
           "description": "Enable blocked-by-keyword detection via comments (default false)",
           "type": "boolean"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"
@@ -1355,7 +1543,12 @@
     "name": "logbutler_project_list",
     "description": "List all projects in the space",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1364,6 +1557,36 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "プロジェクト一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_project_users",
+    "description": "List the users who are members of a project (use it to choose an assignee or notification targets)",
+    "inputSchema": {
+      "properties": {
+        "exclude_group_members": {
+          "description": "If true, exclude users who belong via a team (group) only",
+          "type": "boolean"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクトメンバー一覧取得"
     }
   },
   {
@@ -1382,6 +1605,10 @@
         "keyword": {
           "description": "Search keyword",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "offset": {
           "description": "Pagination offset per resource (default 0)",
@@ -1440,6 +1667,10 @@
           "description": "Max number of files",
           "type": "number"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "offset": {
           "description": "Offset for pagination",
           "type": "number"
@@ -1469,7 +1700,12 @@
     "name": "logbutler_space_digest",
     "description": "Generate a digest for the entire Backlog space",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1484,7 +1720,12 @@
     "name": "logbutler_space_disk_usage",
     "description": "Get disk usage information for the Backlog space",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1499,7 +1740,12 @@
     "name": "logbutler_space_info",
     "description": "Get information about the Backlog space",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1552,6 +1798,10 @@
     "description": "Get team details by team ID",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "team_id": {
           "description": "Team ID (numeric)",
           "type": "number"
@@ -1578,6 +1828,10 @@
           "description": "Max number of teams (max 100)",
           "type": "number"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "no_members": {
           "description": "If true, exclude member information from response",
           "type": "boolean"
@@ -1602,6 +1856,10 @@
     "description": "List teams for a specific project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key",
           "type": "string"
@@ -1630,6 +1888,10 @@
         },
         "limit": {
           "description": "Max number of activities (default 20)",
+          "type": "number"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
           "type": "number"
         },
         "project": {
@@ -1670,6 +1932,10 @@
     "description": "Get user details by user ID",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "user_id": {
           "description": "User ID",
           "type": "string"
@@ -1691,7 +1957,12 @@
     "name": "logbutler_user_list",
     "description": "List all users in the space",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1706,7 +1977,12 @@
     "name": "logbutler_user_me",
     "description": "Get the authenticated user's information",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        }
+      },
       "required": [],
       "type": "object"
     },
@@ -1729,6 +2005,10 @@
         "exclude_status": {
           "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
           "type": "string"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
         },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
@@ -1779,6 +2059,10 @@
     "description": "Get the count of watchings for a user.",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "user_id": {
           "description": "User ID (required)",
           "type": "number"
@@ -1824,6 +2108,10 @@
     "description": "Get watching detail by watching ID.",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "watching_id": {
           "description": "Watching ID (required)",
           "type": "number"
@@ -1848,6 +2136,10 @@
       "properties": {
         "count": {
           "description": "Max number of items (default: 20, max: 100)",
+          "type": "number"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
           "type": "number"
         },
         "offset": {
@@ -1935,6 +2227,10 @@
     "description": "List attachments on a wiki page",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "wiki_id": {
           "description": "Wiki page ID",
           "type": "number"
@@ -1957,6 +2253,10 @@
     "description": "Count wiki pages in a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"
@@ -1979,6 +2279,10 @@
     "description": "Get a wiki page by ID",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "wiki_id": {
           "description": "Wiki page ID",
           "type": "number"
@@ -2007,6 +2311,10 @@
         },
         "max_id": {
           "description": "Maximum history ID",
+          "type": "number"
+        },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
           "type": "number"
         },
         "min_id": {
@@ -2043,6 +2351,10 @@
           "description": "Keyword to search in wiki pages",
           "type": "string"
         },
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"
@@ -2065,6 +2377,10 @@
     "description": "List shared files on a wiki page",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "wiki_id": {
           "description": "Wiki page ID",
           "type": "number"
@@ -2087,6 +2403,10 @@
     "description": "List stars on a wiki page",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "wiki_id": {
           "description": "Wiki page ID",
           "type": "number"
@@ -2109,6 +2429,10 @@
     "description": "List wiki tags in a project",
     "inputSchema": {
       "properties": {
+        "max_response_tokens": {
+          "description": "Safety limit on the estimated response size in tokens (default: 50000, 0 disables). If exceeded, the call fails with response_too_large instead of returning a truncated result",
+          "type": "number"
+        },
         "project_key": {
           "description": "Project key (e.g. PROJ)",
           "type": "string"

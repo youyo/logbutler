@@ -1,6 +1,5 @@
 import { exports } from "cloudflare:workers";
 import { expect } from "vitest";
-import { createTestKey, jwksResponse, signAccessJwt, type TestKey } from "./access";
 import { jsonResponse, mockOutboundFetch, type RecordedCall } from "./mock-fetch";
 
 export const ORIGIN = "https://logbutler.test";
@@ -9,7 +8,6 @@ export const CLIENT_REDIRECT = "https://client.example/cb";
 export const BACKLOG_HOST = "https://example.backlog.com";
 export const BACKLOG_TOKEN = `POST ${BACKLOG_HOST}/api/v2/oauth2/token`;
 export const BACKLOG_MYSELF = `GET ${BACKLOG_HOST}/api/v2/users/myself`;
-export const ACCESS_CERTS = "GET https://logbutler-test.cloudflareaccess.com/cdn-cgi/access/certs";
 
 // wrangler.jsonc の main (src/index.ts) の default export。Worker 全体への HTTP 入口(SELF.fetch 相当)。
 const entry = exports as unknown as { default: Fetcher };
@@ -19,9 +17,8 @@ export const worker = {
     entry.default.fetch(url, { redirect: "manual", ...init }),
 };
 
-/** Backlog と Access JWKS の outbound fetch モックを用意する。 */
+/** Backlog の outbound fetch モックを用意する。 */
 export async function setupMocks(opts: { backlogToken?: (call: RecordedCall) => Response } = {}) {
-  const accessKey: TestKey = await createTestKey("access-kid");
   const backlogToken =
     opts.backlogToken ??
     (() =>
@@ -32,7 +29,6 @@ export async function setupMocks(opts: { backlogToken?: (call: RecordedCall) => 
         expires_in: 3600,
       }));
   const mocks = mockOutboundFetch({
-    [ACCESS_CERTS]: () => jwksResponse(accessKey),
     [BACKLOG_TOKEN]: (call) => backlogToken(call),
     [BACKLOG_MYSELF]: (call) =>
       call.headers.get("authorization") === "Bearer backlog-at-1" ||
@@ -40,11 +36,7 @@ export async function setupMocks(opts: { backlogToken?: (call: RecordedCall) => 
         ? jsonResponse({ id: 42, userId: "alice", name: "Alice", mailAddress: "alice@example.com" })
         : jsonResponse({}, 401),
   });
-  return { accessKey, ...mocks };
-}
-
-export async function accessHeaders(key: TestKey, email = "alice@example.com") {
-  return { "Cf-Access-Jwt-Assertion": await signAccessJwt(key, { email }) };
+  return mocks;
 }
 
 /** Set-Cookie を Cookie ヘッダーに畳む最小のジャー。 */
@@ -103,7 +95,7 @@ export interface TokenSet {
 }
 
 /** /register → /authorize(同意)→ Backlog(モック)→ /callback → /token を通しで行う。 */
-export async function runAuthorizationFlow(access: Record<string, string>) {
+export async function runAuthorizationFlow() {
   const clientId = await registerClient();
   const { verifier, challenge } = await pkcePair();
   const jar = new CookieJar();
@@ -119,7 +111,7 @@ export async function runAuthorizationFlow(access: Record<string, string>) {
     resource: MCP_URL,
   }).toString();
 
-  const consent = await worker.fetch(authorizeUrl.toString(), { headers: access });
+  const consent = await worker.fetch(authorizeUrl.toString());
   expect(consent.status).toBe(200);
   jar.update(consent);
   const html = await consent.clone().text();
@@ -129,7 +121,6 @@ export async function runAuthorizationFlow(access: Record<string, string>) {
   const backlogRedirect = await worker.fetch(`${ORIGIN}/authorize`, {
     method: "POST",
     headers: {
-      ...access,
       Cookie: jar.header(),
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -141,7 +132,7 @@ export async function runAuthorizationFlow(access: Record<string, string>) {
 
   const callbackResponse = await worker.fetch(
     `${ORIGIN}/callback?code=backlog-code&state=${encodeURIComponent(state)}`,
-    { headers: { ...access, Cookie: jar.header() } },
+    { headers: { Cookie: jar.header() } },
   );
   const back = callbackResponse.headers.get("Location") ?? "";
   const clientCode = new URL(back, ORIGIN).searchParams.get("code") ?? "";

@@ -11,7 +11,6 @@ const props: GrantProps = {
   backlogRefreshToken: "backlog-rt",
   backlogExpiresAt: Date.now() + 3_600_000,
   backlogUserId: 42,
-  accessEmail: "alice@example.com",
 };
 const ctx = { waitUntil() {}, passThroughOnException() {}, props } as unknown as ExecutionContext;
 
@@ -96,7 +95,7 @@ describe("MCP API handler (/mcp の下流)", () => {
     });
 
     it("クエリなしなら全ツール", async () => {
-      expect(await names("")).toHaveLength(71);
+      expect(await names("")).toHaveLength(74);
     });
 
     it("環境変数 LOGBUTLER_* は読まない(クエリが唯一の入口)", async () => {
@@ -104,7 +103,7 @@ describe("MCP API handler (/mcp の下流)", () => {
         { ...env, LOGBUTLER_TOOLSETS: "wiki", LOGBUTLER_READ_ONLY: "true" },
         "",
       );
-      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(71);
+      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(74);
     });
 
     it("未知の toolset は 400 で、理由(悪い名前・有効な名前)を本文に返す。ツールは実行しない", async () => {

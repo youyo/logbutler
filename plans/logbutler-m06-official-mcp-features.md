@@ -3,6 +3,16 @@
 ロードマップ: `plans/logbutler-roadmap.md`（「Nulab 公式 MCP から取り込む機能」節。2026-10-28 に価値を見直して縮小した経緯と、取り込まないものの理由がある）。
 前提: M05 完了。参考元は Nulab 公式 `nulab/backlog-mcp-server` v0.23.3（ソース `src/tools/*.ts` を正とする）。
 
+## 0. Cloudflare Access 連携の削除（最初に行う。2026-10-28 ユーザー決定）
+
+Logbutler は「Backlog OAuth で認可する MCP サーバー」だけを担う。Access による利用者の制限と MCP Server Portal は Logbutler の外側で別に管理する（Cloudflare の managed MCP access などで担う想定）。
+
+- 削除: `src/auth/access-jwt.ts` と `/authorize`・`/callback` での検証、環境変数 `ACCESS_TEAM_DOMAIN` / `ACCESS_AUD`、`/callback` での Access メールアドレスの一致確認、props の Access メールアドレス
+- 維持: OAuth 認可サーバー（DCR・PKCE・state・iss・リフレッシュ）、Backlog OAuth、同意画面（クライアント名・送信先ホストの表示、XSS エスケープ）、偽造 state・未登録 redirect_uri の拒否
+- テスト: Access 関連のテスト（JWT なし・期限切れ・aud 違いで 403 など）は、仕様の変更として削除・置き換える。**置き換え先を先に書く**: 「Access の JWT なしで `/authorize` → `/callback` → `/token` が通る」E2E を Red で確認してから削除する。削除したテストと理由を報告に列挙する（テストを弱める禁止規定の例外。ユーザー決定による仕様変更）
+- ドキュメント: ADR 0009（Access 連携の削除。ADR 0001・0002 の該当箇所に「0009 で置き換え」と注記）、README・`.dev.vars.example`・CLAUDE.md・`wrangler.jsonc` から `ACCESS_*` を削除
+- 確認: `grep -rn -i "access" src` で Access 連携の残りがないこと（`access_token` など OAuth の語は除く）
+
 ## 目的
 
 logvalet に無く、実際に価値があるものだけを追加する: 自分宛ての通知の把握と、課題作成時の担当者・通知先の選定に必要なプロジェクトメンバー一覧。

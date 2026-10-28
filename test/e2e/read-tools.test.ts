@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   firstText,
   MCP_URL,
@@ -15,15 +13,14 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
 
 /** 認可フローを通して MCP のアクセストークンを得てから、Backlog のモックを差し替える。 */
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0]) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return { token: access_token, ...mockOutboundFetch(handlers) };
@@ -142,7 +139,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
 
     const all = await list();
     expect(await list("all")).toEqual(all);
-    expect(all).toHaveLength(38 + 15 + 11 + 7); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions + M05A の分析 11 + M05B の digest・検索 7
+    expect(all).toHaveLength(38 + 15 + 11 + 7 + 3); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3
     expect(all).toContain("logbutler_issue_list");
 
     const wikiOnly = await list("wiki");

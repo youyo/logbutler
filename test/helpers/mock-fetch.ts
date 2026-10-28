@@ -24,7 +24,7 @@ function findHandler(handlers: Record<string, Handler>, key: string): Handler | 
 }
 
 /**
- * outbound fetch のモック。登録していない宛先への通信は例外にし、実 Backlog・実 Access へ
+ * outbound fetch のモック。登録していない宛先への通信は例外にし、実 Backlog へ
  * 通信が漏れないことをテストで保証する。キーは "METHOD https://host/path"(クエリは含めない。`*` はパスの 1 セグメントに一致)。
  */
 export function mockOutboundFetch(handlers: Record<string, Handler>) {

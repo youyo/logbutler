@@ -273,7 +273,7 @@ describe("my_tasks", () => {
     });
     it("3 つとも上限まで続いても 31 回で止まり、truncated と警告が出る", async () => {
       const r = await run(
-        {},
+        { max_response_tokens: 0 }, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
         {
           "GET /issues": endless((n) => issue({ key: `P-${n}`, dueDate: "2026-10-01T00:00:00Z" })),
           "GET /users/1/watchings": endless((n) => watching(`W-${n}`, { updated: ago(1) })),

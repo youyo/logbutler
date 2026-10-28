@@ -3,7 +3,6 @@
  * 認可フロー全体は他の E2E が固定しているので、ここではツールの振る舞いと API 呼び出しを固定する。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import {
   activitiesDesc,
   activity,
@@ -17,7 +16,6 @@ import {
 } from "../helpers/analysis-fixtures";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   firstText,
   mcpRequest,
@@ -34,14 +32,13 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
 
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0]) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return { token: access_token, ...mockOutboundFetch(handlers) };

@@ -31,7 +31,7 @@
 ## 帰結
 
 - issuer とリソース識別子(`<PUBLIC_BASE_URL>/mcp`)は固定の正規 URL が必要なので、環境変数 `PUBLIC_BASE_URL`(オリジンのみ、`https`。ローカルのみ `http://localhost:8787` 可)を追加した。
-- `OAuthProvider` は保護対象を `apiRoute` に限る。`/authorize` と `/callback` の保護は Cloudflare Access + Worker 側の JWT 検証(ADR 0001)で行う。
+- `OAuthProvider` は保護対象を `apiRoute` に限る。`/authorize` と `/callback` の保護は Cloudflare Access + Worker 側の JWT 検証(ADR 0001)で行っていた(**ADR 0009 で置き換え**: Access 連携は削除した)。
 - リソースが増える、または認可サーバーを他サービスと共有する必要が出たら、`OAuthAuthorizationServer` + `OAuthResourceServer` の分離構成へ移行する。`ctx.props` と `ctx.auth` は両ホストで同じなので、`apiHandler` はそのまま移せる。
 - MCP の保護リソースメタデータの URL は、ライブラリの仕様で `/.well-known/oauth-protected-resource/mcp`(resource のパス付き)になる。`WWW-Authenticate` の `resource_metadata` もこの URL を指す。
 

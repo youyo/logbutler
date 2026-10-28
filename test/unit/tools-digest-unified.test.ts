@@ -393,7 +393,7 @@ describe("digest_unified: ページングと部分失敗", () => {
 
   it("課題が上限(10 ページ = 1,000 件)まで続いたら issues_truncated と truncated", async () => {
     const r = await run(
-      {},
+      { max_response_tokens: 0 }, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
       {
         "GET /issues": (call: RecordedCall) =>
           jsonResponse(
@@ -480,6 +480,7 @@ describe("digest_unified: API 呼び出しの最悪ケース", () => {
         project_keys: projects.join(","),
         user_ids: userIds.join(","),
         issue_keys: issueKeys.join(","),
+        max_response_tokens: 0, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
       },
       respond,
     );

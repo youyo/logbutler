@@ -8,7 +8,7 @@ import { createTokenExchangeCallback, MCP_ACCESS_TOKEN_TTL_SECONDS } from "./tok
 /**
  * 認可サーバー + MCP リソースサーバーを 1 つの Worker に同居させる(`OAuthProvider`)。
  * - /mcp (apiRoute)        : Worker 発行のアクセストークンで保護。apiHandler = ステートレス MCP
- * - /token /register /.well-known/* : OAuthProvider が処理(Access を通さない)
+ * - /token /register /.well-known/* : OAuthProvider が処理
  * - それ以外(/authorize /callback /healthz) : defaultHandler = Hono アプリ
  *
  * issuer・resource は固定の正規 URL が必要なので、PUBLIC_BASE_URL から最初のリクエストで組み立てる。

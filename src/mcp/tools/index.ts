@@ -42,7 +42,8 @@ import {
   issueUpdate,
 } from "./issue-write";
 import { metaCategories, metaCustomField, metaIssueTypes, metaStatuses, metaVersion } from "./meta";
-import { projectConventions, projectGet, projectList } from "./project";
+import { notificationCount, notificationList } from "./notification";
+import { projectConventions, projectGet, projectList, projectUsers } from "./project";
 import { sharedFileDownload, sharedFileList } from "./shared-file";
 import { spaceDiskUsage, spaceInfo } from "./space";
 import { starAdd } from "./star";
@@ -145,4 +146,8 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   activityDigest,
   userActivity,
   digestUnified,
+  // M06: Nulab 公式 MCP から取り込んだ 3 ツール
+  notificationList,
+  notificationCount,
+  projectUsers,
 ];

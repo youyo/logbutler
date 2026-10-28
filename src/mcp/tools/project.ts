@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { showConventions } from "../../conventions/show";
-import { reqStr, seg } from "../args";
+import { optBool, reqStr, seg } from "../args";
 import { defineTool } from "../registry";
 
 export const projectGet = defineTool({
@@ -31,4 +31,22 @@ export const projectConventions = defineTool({
   toolset: "project",
   inputSchema: z.object({ project_key: reqStr("Project key") }),
   handler: ({ project_key }, { client }) => showConventions(client, project_key),
+});
+
+// Nulab 公式 MCP から取り込んだ。課題作成時の担当者・通知先の選定に使う。logvalet には無い。
+export const projectUsers = defineTool({
+  name: "logbutler_project_users",
+  title: "プロジェクトメンバー一覧取得",
+  description:
+    "List the users who are members of a project (use it to choose an assignee or notification targets)",
+  category: "ReadOnly",
+  toolset: "project",
+  inputSchema: z.object({
+    project_key: reqStr("Project key (e.g. PROJECT)"),
+    exclude_group_members: optBool("If true, exclude users who belong via a team (group) only"),
+  }),
+  handler: ({ project_key, exclude_group_members }, { client }) =>
+    client.request("GET", `/projects/${seg(project_key)}/users`, {
+      query: { excludeGroupMembers: exclude_group_members },
+    }),
 });

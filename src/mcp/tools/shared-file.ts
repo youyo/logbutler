@@ -27,6 +27,7 @@ export const sharedFileList = defineTool({
 
 export const sharedFileDownload = defineTool({
   name: "logbutler_shared_file_download",
+  responseLimit: false, // ファイルサイズの上限は別にある(MAX_DOWNLOAD_BYTES)
   title: "共有ファイルダウンロード",
   description: "Download a shared file (max 20MB, returned as base64)",
   category: "ReadOnly",

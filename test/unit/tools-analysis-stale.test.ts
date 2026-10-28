@@ -221,7 +221,7 @@ describe("issue_stale", () => {
         "GET /issues": endless((n) => issue({ key: `P-${n}`, updated: ago(10) })),
       };
       for (const k of ["A", "B", "C", "D", "E"]) respond[`GET /projects/${k}`] = project();
-      const r = await run({ project_keys: "A,B,C,D,E" }, respond);
+      const r = await run({ project_keys: "A,B,C,D,E", max_response_tokens: 0 }, respond); // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
       expect(r.isError, r.text).toBe(false);
       expect(r.calls).toHaveLength(55);
       expect(r.json.analysis.truncated).toBe(true);

@@ -3,7 +3,7 @@
  * `{"schema_version":"1","error":{"code","message","retryable"}}` に変換する(ADR 0004)。
  */
 
-/** logvalet の列挙(argument/authentication/permission/not_found/api/generic)+ `rate_limited`。 */
+/** logvalet の列挙(argument/authentication/permission/not_found/api/generic)+ `rate_limited` + `response_too_large`(M06)。 */
 export const ERROR_CODES = [
   "argument_error",
   "authentication_error",
@@ -11,6 +11,7 @@ export const ERROR_CODES = [
   "not_found",
   "api_error",
   "rate_limited",
+  "response_too_large",
   "generic_error",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -31,6 +32,22 @@ export class LogbutlerError extends Error {
 export class ArgumentError extends LogbutlerError {
   constructor(message: string) {
     super("argument_error", message, false);
+  }
+}
+
+/**
+ * 応答が上限(ツール引数 max_response_tokens)を超えた。切り詰めずにエラーにする(ADR 0007)。
+ * 絞り込んでも同じ条件では直らないので retryable は false。
+ */
+export class ResponseTooLargeError extends LogbutlerError {
+  constructor(estimatedTokens: number, limit: number) {
+    super(
+      "response_too_large",
+      `Response is too large: estimated size ${estimatedTokens} tokens exceeds the limit of ${limit} tokens. ` +
+        "Narrow the request and retry (e.g. set count / offset, a date range, or project_key), " +
+        "or raise max_response_tokens (0 disables the limit).",
+      false,
+    );
   }
 }
 

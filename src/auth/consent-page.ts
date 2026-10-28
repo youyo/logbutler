@@ -8,20 +8,13 @@ export interface ConsentPageInput {
   handle: string;
   /** トークンの送信先として表示する Backlog スペースのホスト。 */
   backlogHost: string;
-  /** Cloudflare Access で確認済みのユーザー。 */
-  accessEmail: string;
 }
 
 /**
  * 同意画面。クライアント由来の文字列(名前・URL・スコープ)はすべてエスケープする。
  * 表示必須: クライアント名・スコープ・リダイレクト先ホスト(workers-oauth-provider の docs/consent-page.md)。
  */
-export function renderConsentPage({
-  details,
-  handle,
-  backlogHost,
-  accessEmail,
-}: ConsentPageInput): string {
+export function renderConsentPage({ details, handle, backlogHost }: ConsentPageInput): string {
   const name = escapeHtml(details.clientName);
   const origin = details.clientDomain
     ? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
@@ -42,7 +35,6 @@ export function renderConsentPage({
 </head>
 <body>
 <h1>Allow ${name} to access Backlog?</h1>
-<p>Signed in as <strong>${escapeHtml(accessEmail)}</strong>.</p>
 <p>${origin} Access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>.</p>
 ${loopback}
 <p>You will be asked to sign in to Backlog at <strong>${escapeHtml(backlogHost)}</strong> next.</p>

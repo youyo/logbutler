@@ -322,7 +322,7 @@ describe("issue_timeline", () => {
     });
     it("コメントが上限まで続き、max_activity_pages=10 でも 21 回で止まる", async () => {
       const r = await run(
-        { max_activity_pages: 10 },
+        { max_activity_pages: 10, max_response_tokens: 0 }, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
         {
           "GET /issues/P-1/comments": endlessComments(),
           "GET /projects/P/activities": endlessActivities((id) => act(id, 2, ago(2))),

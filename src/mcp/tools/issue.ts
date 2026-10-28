@@ -134,6 +134,7 @@ export const issueAttachmentList = defineTool({
 
 export const issueAttachmentDownload = defineTool({
   name: "logbutler_issue_attachment_download",
+  responseLimit: false, // ファイルサイズの上限は別にある(MAX_DOWNLOAD_BYTES)
   title: "添付ファイルダウンロード",
   description: "Download an attachment from an issue (max 20MB, returned as base64)",
   category: "ReadOnly",

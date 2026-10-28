@@ -308,7 +308,11 @@ describe("registerTools", () => {
       openWorldHint: true,
     });
     expect(get.inputSchema.type).toBe("object");
-    expect(Object.keys(get.inputSchema.properties).sort()).toEqual(["count", "issue_key"]);
+    expect(Object.keys(get.inputSchema.properties).sort()).toEqual([
+      "count",
+      "issue_key",
+      "max_response_tokens",
+    ]);
     expect(get.inputSchema.required).toEqual(["issue_key"]);
   });
 

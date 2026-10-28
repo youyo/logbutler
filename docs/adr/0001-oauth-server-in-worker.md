@@ -18,7 +18,7 @@ Worker が MCP クライアント(Portal を含む)に対する OAuth 認可サ�
 - Backlog のアクセストークン・リフレッシュトークン・期限は、grant の `props` にだけ保存する(ライブラリが暗号化して KV に置く。平文の KV キーやログには出さない)。
 - `tokenExchangeCallback` で、MCP トークンの更新時に Backlog のトークンも更新して `props` を差し替える。Backlog 側で失効していれば `invalid_grant` を返して grant を失効させ、クライアントに再認可させる。一時障害なら `temporarily_unavailable`(503)で grant を残す。
 - MCP トークンの寿命(30 分)を Backlog のアクセストークン(約 1 時間)より短くし、MCP の更新 1 回につき Backlog の更新が高々 1 回になるようにして、並列リフレッシュの競合を避ける。
-- 利用者の保護: `/authorize` と `/callback` だけを Cloudflare Access(self-hosted app)で保護し、Worker 側でも `Cf-Access-Jwt-Assertion` を検証する(署名・iss・aud・期限)。`/mcp`・`/token`・`/register`・`/.well-known/*` は Portal がサーバー間で呼ぶので Access を通さず(Bypass)、Worker 発行トークンで守る。
+- 利用者の保護(**ADR 0009 で置き換え**: Access 連携は削除した。利用者の制限は Logbutler の外側で行う。以下は M01 当時の決定): `/authorize` と `/callback` だけを Cloudflare Access(self-hosted app)で保護し、Worker 側でも `Cf-Access-Jwt-Assertion` を検証する(署名・iss・aud・期限)。`/mcp`・`/token`・`/register`・`/.well-known/*` は Portal がサーバー間で呼ぶので Access を通さず(Bypass)、Worker 発行トークンで守る。
 - 同意画面(`/authorize`)で、クライアント名・リダイレクト先ホスト・Backlog のホストを表示し、承認後にだけ Backlog へリダイレクトする(confused deputy 対策。`beginConsent` / `approveConsent` / `beginUpstream` を使う)。
 
 ## 却下した案

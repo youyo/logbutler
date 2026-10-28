@@ -17,7 +17,7 @@ Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Re
 
 ```
 MCP クライアント (Portal) ──/mcp, /token, /register, /.well-known/*──▶ Worker(Worker 発行トークンで保護)
-利用者のブラウザ ──/authorize, /callback──▶ Cloudflare Access ──▶ Worker ──▶ Backlog OAuth
+利用者のブラウザ ──/authorize, /callback──▶ Worker ──▶ Backlog OAuth
 ```
 
 設計の理由は `docs/adr/` を参照。
@@ -26,6 +26,8 @@ MCP クライアント (Portal) ──/mcp, /token, /register, /.well-known/*─
 - [ADR 0002: 認可サーバーと MCP サーバーを 1 つの Worker に同居させる](docs/adr/0002-single-worker-auth-and-mcp.md)
 - [ADR 0003: Backlog クライアントの直列化・リトライ・呼び出し上限](docs/adr/0003-backlog-client-serialization-and-retry.md)
 - [ADR 0004: ツールの出力形式とエラー形式](docs/adr/0004-tool-output-and-error-format.md)
+- [ADR 0007: 応答サイズの上限](docs/adr/0007-response-size-limit.md)
+- [ADR 0009: Cloudflare Access 連携の削除](docs/adr/0009-remove-cloudflare-access.md)
 
 ## 開発
 
@@ -42,7 +44,7 @@ mise run dev            # wrangler dev
 ```
 
 - テストは `@cloudflare/vitest-plugin`(旧 `@cloudflare/vitest-pool-workers`)で workerd 上で動く。
-  E2E は Worker 全体(`src/index.ts` の default export)へ HTTP を送り、Backlog と Cloudflare Access の JWKS への outbound fetch だけをモックする。実 Backlog・実 Access へは通信しない。
+  E2E は Worker 全体(`src/index.ts` の default export)へ HTTP を送り、Backlog への outbound fetch だけをモックする。実 Backlog へは通信しない。
 - lint / 整形は Biome(単一ツールで設定が小さく、型検査は `tsc` で別に行うため)。
 - 依存パッケージは公開から 2 週間以上たった正確なバージョンに固定している(`^` / `~` は使わない)。
 
@@ -52,8 +54,6 @@ mise run dev            # wrangler dev
 |---|---|---|
 | `OAUTH_KV` | KV | OAuth の grant・トークン・クライアント登録 |
 | `BACKLOG_SPACE_HOST` | var | 例 `example.backlog.com` |
-| `ACCESS_TEAM_DOMAIN` | var | 例 `your-team.cloudflareaccess.com` |
-| `ACCESS_AUD` | var | Cloudflare Access アプリの AUD タグ |
 | `PUBLIC_BASE_URL` | var | この Worker の公開オリジン(例 `https://logbutler.example.com`)。issuer とリソース識別子になる |
 | `BACKLOG_CLIENT_ID` | secret | Backlog OAuth クライアント ID |
 | `BACKLOG_CLIENT_SECRET` | secret | Backlog OAuth クライアントシークレット |
@@ -68,6 +68,8 @@ mise run dev            # wrangler dev
 | `read_only` | `/mcp` の URL クエリ | `true` で書き込み・破壊的ツールを公開しない(既定 `false`)。例 `/mcp?toolsets=issue&read_only=true` |
 | `timezone` | ツール引数 | 「今日」「今週」の基準になる IANA 名(省略時 `Asia/Tokyo`)。`issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` `activity_digest` `user_activity` `digest_unified` にある |
 
+| `max_response_tokens` | ツール引数 | 応答サイズの安全網(推定トークン数。省略時 50000、`0` で無効)。超えると切り詰めずに `response_too_large`(`retryable: false`)のエラーを返す。読み取りツールにある(ダウンロード系 2 個を除く)。書き込み系は対象外。`issue_list` の count が大きいときや分析ツールで複数プロジェクトを指定したときは上限を超えうる。その場合は絞り込むか `max_response_tokens` を指定する。ADR 0007 |
+
 不正なクエリ値(未知の toolset 名、`read_only` が `true`/`false` 以外)は 400 で、理由を本文に返す。不正な `timezone` は `argument_error`。
 
 **`read_only` の綴りを間違えると効かない**(未知のクエリは無視されるため)。そこで、まぎらわしい綴り(`readonly` `readOnly` `READ_ONLY` `read-only`、`tool_sets` `Toolsets` など。小文字にして `_` と `-` を除くと `read_only` / `toolsets` に一致するもの)は 400 にして、正しいキー名を案内する。それ以外の未知のクエリは従来どおり無視する。
@@ -75,10 +77,13 @@ mise run dev            # wrangler dev
 
 ローカルでは `.dev.vars.example` をコピーして `.dev.vars` を作る(コミットしない)。
 
-### Cloudflare Access の設定(デプロイ時)
+### 利用者の制限
 
-self-hosted アプリで **`/authorize` と `/callback` だけ** を保護する。`/mcp`・`/token`・`/register`・`/.well-known/*`・`/healthz` は Portal などがサーバー間で呼ぶので Access を通さない(Bypass)。
-Worker は `/authorize` と `/callback` で `Cf-Access-Jwt-Assertion` の署名・iss・aud・期限を検証するので、Access の設定漏れは 403 になる。
+Logbutler は Backlog OAuth で認可する MCP サーバーだけを担い、Cloudflare Access 連携は持たない(ADR 0009)。
+利用できる人の制限は Logbutler の外側(MCP Server Portal の Access ポリシーなど)で行う。
+
+注意: `/register`(DCR)と `/authorize`(同意画面の表示)は誰でも匿名で呼べる。Backlog の OAuth ログインが要るため不正な grant は作られないが、
+匿名の DCR で KV にクライアント登録が書き込まれる。レート制限は Logbutler では実装しないので、必要なら前段の Cloudflare WAF / Rate Limiting で行う(ADR 0009)。
 
 ## 状態
 

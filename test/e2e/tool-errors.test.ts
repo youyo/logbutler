@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_MYSELF,
   firstText,
   mcpRequest,
@@ -14,13 +12,12 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 /** 認可フローを通して MCP のアクセストークンを得てから、Backlog のモックを差し替える。 */
 async function loggedIn(myself: (n: number) => Response) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   let n = 0;

@@ -24,7 +24,7 @@ logvalet の MCP ツールは JSON を text content で返し、エラーはプ�
 {"schema_version":"1","error":{"code":"not_found","message":"Backlog API error (HTTP 404, code=6): No such issue.","retryable":false}}
 ```
 
-`code` は logvalet の列挙 + `rate_limited`:
+`code` は logvalet の列挙 + `rate_limited` + `response_too_large`(M06。ADR 0007):
 
 | HTTP | code | retryable |
 |---|---|---|
@@ -38,6 +38,7 @@ logvalet の MCP ツールは JSON を text content で返し、エラーはプ�
 | 通信失敗・タイムアウト(HTTP 応答なし) | `api_error` | true |
 | 呼び出し回数の上限超過 | `api_error` | false |
 | ツール入力の検証エラー | `argument_error` | false |
+| 応答が `max_response_tokens` の上限を超えた | `response_too_large` | false |
 | 想定外の例外 | `generic_error`(メッセージは固定文) | false |
 
 - logvalet との差分: logvalet は 429 を `api_error` 相当(`ErrRateLimited` → `ExitAPIError`)にまとめ、`error.code` には Backlog の数値コードを入れていた。Logbutler は 429 を `rate_limited` に分け、Backlog の `errors[0].code` / `message` は message 文字列に含めて保持する(`BacklogApiError.backlogCode` / `backlogMessage` にも持つ)。

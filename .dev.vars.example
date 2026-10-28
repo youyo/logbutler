@@ -7,9 +7,9 @@ BACKLOG_CLIENT_SECRET=
 
 # 以下は秘密ではないが、ローカルでは .dev.vars に置いて wrangler.jsonc の vars を上書きできる
 # BACKLOG_SPACE_HOST=example.backlog.com
-# ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
-# ACCESS_AUD=
 # PUBLIC_BASE_URL=http://localhost:8787
 
 # ツールの絞り込み(toolsets / read_only)と「今日」の基準(timezone)は環境変数ではなく、
 # 接続 URL のクエリ(/mcp?toolsets=issue,wiki&read_only=true)とツール引数 timezone で決める。README を参照。
+
+# 応答サイズの上限 max_response_tokens(既定 50000、0 で無効)もツール引数で、環境変数ではない。ADR 0007 を参照。

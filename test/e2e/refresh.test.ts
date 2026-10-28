@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_MYSELF,
   BACKLOG_TOKEN,
   mcpRequest,
@@ -17,12 +15,9 @@ import {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
-beforeEach(() => {
-  clearJwksCache();
-});
+beforeEach(() => {});
 
 function refreshRequest(clientId: string, refreshToken: string) {
   return worker.fetch(`${ORIGIN}/token`, {
@@ -62,10 +57,10 @@ function backlogTokenResponder(opts: { rotate: boolean; refreshStatus?: number }
 
 describe("E2E 4: リフレッシュで Backlog のトークンも更新される", () => {
   it("Backlog のアクセストークンが期限切れの状態で MCP クライアントがリフレッシュすると、Backlog のトークンも更新され /mcp で新トークンが使われる", async () => {
-    const { accessKey, callsTo } = await setupMocks({
+    const { callsTo } = await setupMocks({
       backlogToken: backlogTokenResponder({ rotate: true }),
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
     // コード交換時は取りたてなので Backlog のリフレッシュは起きていない
     expect(callsTo(BACKLOG_TOKEN)).toHaveLength(1);
@@ -105,10 +100,10 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
   });
 
   it("Backlog がリフレッシュトークンをローテーションしない場合も、元のリフレッシュトークンで更新を続けられる", async () => {
-    const { accessKey, callsTo } = await setupMocks({
+    const { callsTo } = await setupMocks({
       backlogToken: backlogTokenResponder({ rotate: false }),
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
 
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 2 * 3600 * 1000 });
@@ -125,7 +120,7 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
 
   it("Backlog の期限に余裕があるうちは、MCP のリフレッシュで Backlog を呼ばない", async () => {
     // Backlog のトークンが 3 時間有効なら、MCP の 30 分後のリフレッシュでは Backlog を更新しない
-    const { accessKey, callsTo } = await setupMocks({
+    const { callsTo } = await setupMocks({
       backlogToken: () =>
         jsonResponse({
           access_token: "backlog-at-1",
@@ -134,7 +129,7 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
           expires_in: 3 * 3600,
         }),
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
     const r = await refreshRequest(flow.clientId, first.refresh_token);
     expect(r.status).toBe(200);
@@ -142,10 +137,10 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
   });
 
   it("Backlog 側で失効(invalid_grant)していたらリフレッシュは invalid_grant になり、再認可が必要になる", async () => {
-    const { accessKey } = await setupMocks({
+    await setupMocks({
       backlogToken: backlogTokenResponder({ rotate: true, refreshStatus: 400 }),
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
 
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 2 * 3600 * 1000 });
@@ -160,7 +155,7 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
 
   it("Backlog の一時障害は 503 temporarily_unavailable で、grant は残る(再試行できる)", async () => {
     let backlogDown = true;
-    const { accessKey } = await setupMocks({
+    await setupMocks({
       backlogToken: (call) => {
         const form = new URLSearchParams(call.body);
         if (form.get("grant_type") === "authorization_code") {
@@ -175,7 +170,7 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
           : jsonResponse({ access_token: "backlog-at-2", expires_in: 3600 });
       },
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
 
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 2 * 3600 * 1000 });
@@ -189,10 +184,10 @@ describe("E2E 4: リフレッシュで Backlog のトークンも更新される
   });
 
   it("/mcp で Backlog が 401 を返したら、MCP も 401 + invalid_token を返してクライアントにリフレッシュさせる", async () => {
-    const { accessKey } = await setupMocks({
+    await setupMocks({
       backlogToken: backlogTokenResponder({ rotate: true }),
     });
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const flow = await runAuthorizationFlow();
     const first = (await flow.tokenResponse.json()) as TokenSet;
 
     // Backlog 側でトークンが取り消された状態にする

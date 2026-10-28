@@ -11,7 +11,7 @@ description = "Unit テスト (workerd 上で実行)"
 run = "pnpm exec vitest run --project unit"
 
 [tasks."test:e2e"]
-description = "E2E テスト (Worker 全体に HTTP を送る。Backlog と Access JWKS は outbound fetch のモック)"
+description = "E2E テスト (Worker 全体に HTTP を送る。Backlog は outbound fetch のモック)"
 run = "pnpm exec vitest run --project e2e"
 
 [tasks."test:update-snapshots"]

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import {
   activity,
   ago,
@@ -13,7 +12,6 @@ import {
 } from "../helpers/analysis-fixtures";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   firstText,
   mcpRequest,
@@ -30,14 +28,13 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
 
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0]) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return { token: access_token, ...mockOutboundFetch(handlers) };
@@ -148,6 +145,7 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     const { token, calls } = await loggedIn(handlers);
     const { isError, json } = await callAnalysis(token, "logbutler_issue_stale", {
       project_keys: "A,B,C,D,E",
+      max_response_tokens: 0, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
     });
     expect(isError).toBe(false);
     expect(calls).toHaveLength(55);
@@ -227,6 +225,7 @@ describe("E2E 11: 分析ツール(M05A)が OAuth 済みトークンの /mcp で�
     const { isError, json } = await callAnalysis(token, "logbutler_issue_timeline", {
       issue_key: "P-1",
       max_activity_pages: 10,
+      max_response_tokens: 0, // 呼び出し回数の上限を調べるテスト。応答サイズの安全網(M06)は別のテストで見るので外す
     });
     expect(isError).toBe(false);
     expect(calls).toHaveLength(21);

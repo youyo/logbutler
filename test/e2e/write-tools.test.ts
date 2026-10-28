@@ -1,9 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   firstText,
   MCP_URL,
@@ -16,14 +14,13 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
 
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0]) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return { token: access_token, ...mockOutboundFetch(handlers) };
@@ -184,12 +181,12 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     const rw = (await rpcWith("false", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(rw, n).toContain(n);
     expect(rw).toContain("logbutler_project_conventions");
-    expect(rw).toHaveLength(38 + 14 + 1 + 11 + 7); // + M05A の分析 11 + M05B の 7(すべて ReadOnly)
+    expect(rw).toHaveLength(38 + 14 + 1 + 11 + 7 + 3); // + M05A の分析 11 + M05B の 7 + M06 の 3(すべて ReadOnly)
 
     const ro = (await rpcWith("true", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(ro, n).not.toContain(n);
     expect(ro).toContain("logbutler_project_conventions");
-    expect(ro).toHaveLength(38 + 1 + 11 + 7);
+    expect(ro).toHaveLength(38 + 1 + 11 + 7 + 3);
 
     const blocked = await rpcWith("true", "tools/call", {
       name: "logbutler_watching_delete",

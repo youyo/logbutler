@@ -15,8 +15,6 @@
   "vars": {
     // これらは秘密ではない。デプロイ前に実値へ差し替える。
     "BACKLOG_SPACE_HOST": "example.backlog.com",
-    "ACCESS_TEAM_DOMAIN": "example-team.cloudflareaccess.com",
-    "ACCESS_AUD": "replace-with-access-application-aud",
     "PUBLIC_BASE_URL": "https://logbutler.example.com"
   }
   // secrets (wrangler secret put): BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET

@@ -3,10 +3,8 @@
  * 環境変数は使わない。Worker 全体への HTTP(認可フローで得たトークン)で固定する。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   firstText,
   MCP_URL,
@@ -22,14 +20,13 @@ import {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
 
 async function loggedIn(handlers: Parameters<typeof mockOutboundFetch>[0] = {}) {
-  const { accessKey } = await setupMocks();
-  const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+  await setupMocks();
+  const flow = await runAuthorizationFlow();
   const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
   vi.restoreAllMocks();
   return { token: access_token, ...mockOutboundFetch(handlers) };

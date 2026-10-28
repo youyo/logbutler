@@ -6,10 +6,6 @@ export interface Env {
   OAUTH_KV: KVNamespace;
   /** 接続先 Backlog スペースのホスト名(例 example.backlog.com)。1 デプロイ = 1 スペース。 */
   BACKLOG_SPACE_HOST: string;
-  /** Cloudflare Access のチームドメイン(例 your-team.cloudflareaccess.com)。 */
-  ACCESS_TEAM_DOMAIN: string;
-  /** Cloudflare Access アプリケーションの AUD タグ。 */
-  ACCESS_AUD: string;
   /** この Worker の公開 URL(オリジンのみ。例 https://logbutler.example.com)。issuer とリソース識別子の元になる。 */
   PUBLIC_BASE_URL: string;
   /** Backlog OAuth クライアント ID(secret)。 */

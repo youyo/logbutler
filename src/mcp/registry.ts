@@ -13,6 +13,11 @@ import {
   idempotencyCacheKey,
   withIdempotency,
 } from "./idempotency";
+import {
+  assertWithinResponseLimit,
+  maxResponseTokensShape,
+  resolveResponseLimit,
+} from "./response-limit";
 
 /** logvalet の 4 区分(`internal/mcp/tool_categories.go`)。 */
 export type ToolCategory = "ReadOnly" | "WriteIdempotent" | "WriteNonIdempotent" | "Destructive";
@@ -106,6 +111,11 @@ export interface ToolDefinitionInput<S extends z.ZodObject> {
    * ページングや課題ごとの取得で膨らむツールは、最悪ケースの式から決めて明示する(ADR 0006)。
    */
   maxApiCalls?: number;
+  /**
+   * 応答サイズの上限(引数 max_response_tokens)を付けるか。読み取り(ReadOnly)ツールは既定で付け、
+   * ダウンロード系は false にする。書き込み系には付けない(成功を失敗に見せないため。ADR 0007)。
+   */
+  responseLimit?: boolean;
   /** 戻り値は JSON にして text content に入れる。構造化出力(structuredContent)は使わない。 */
   handler: (args: z.infer<S>, ctx: ToolContext) => Promise<unknown>;
 }
@@ -117,6 +127,8 @@ export interface ToolDefinition {
   readonly toolset: Toolset;
   readonly inputSchema: z.ZodObject;
   readonly maxApiCalls?: number;
+  /** 応答サイズの上限(max_response_tokens)を適用するか。 */
+  readonly responseLimit: boolean;
   readonly annotations: ToolAnnotations;
   /** 引数は SDK が inputSchema で検証済みのものだけが来る。 */
   readonly handler: (args: unknown, ctx: ToolContext) => Promise<unknown>;
@@ -129,12 +141,16 @@ export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>)
   if (!TOOL_NAME.test(input.name)) {
     throw new Error(`ツール名は logbutler_<resource>_<action> の形式にする: ${input.name}`);
   }
+  const responseLimit = input.category === "ReadOnly" && input.responseLimit !== false;
   return {
     name: input.name,
     description: input.description,
     category: input.category,
     toolset: input.toolset,
-    inputSchema: input.inputSchema,
+    inputSchema: responseLimit
+      ? input.inputSchema.extend(maxResponseTokensShape)
+      : input.inputSchema,
+    responseLimit,
     ...(input.maxApiCalls === undefined ? {} : { maxApiCalls: input.maxApiCalls }),
     annotations: annotationsFor(input.category, input.title),
     handler: (args, ctx) => input.handler(args as z.infer<S>, ctx),
@@ -315,6 +331,12 @@ export function registerTools(
             timezone:
               typeof tzArg === "string" ? assertTimezone(tzArg) : deps.timezone || DEFAULT_TIMEZONE,
           };
+          // 上限の引数は Backlog を呼ぶ前に検証する(負の値で API を無駄に叩かない)。
+          const responseLimit = tool.responseLimit
+            ? resolveResponseLimit(
+                (parsed.data as { max_response_tokens?: number }).max_response_tokens,
+              )
+            : undefined;
           if (tool.category === "WriteNonIdempotent" && deps.idempotency) {
             // 明示キーは inputSchema に宣言しないので、zod の検証前の生の引数と params._meta から取る。
             const explicit = explicitKeyFrom(mcpCtx?.mcpReq?._meta, args);
@@ -331,7 +353,9 @@ export function registerTools(
             );
           }
           const result = await tool.handler(parsed.data, toolCtx);
-          return textResult(JSON.stringify(result ?? null));
+          const text = JSON.stringify(result ?? null);
+          if (responseLimit !== undefined) assertWithinResponseLimit(text, responseLimit);
+          return textResult(text);
         } catch (e) {
           if (e instanceof BacklogUnauthorizedError) deps.onBacklogUnauthorized();
           if (!(e instanceof LogbutlerError)) logUnexpected(tool.name, e, client);

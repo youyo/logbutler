@@ -8,6 +8,4 @@ export interface GrantProps {
   /** Backlog アクセストークンの期限(エポックミリ秒)。 */
   backlogExpiresAt: number;
   backlogUserId: number;
-  /** /authorize・/callback を通った Cloudflare Access ユーザーのメールアドレス。 */
-  accessEmail: string;
 }

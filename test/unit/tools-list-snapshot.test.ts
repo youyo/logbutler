@@ -10,6 +10,7 @@ import {
   fromLogvaletBaseline,
   type McpToolListing,
   normalizeTools,
+  RESPONSE_LIMIT_TOOLS,
 } from "../helpers/baseline";
 import { fakeClient, rpcTo } from "../helpers/mcp";
 
@@ -100,6 +101,11 @@ const M05B_TOOLS = [
   "digest_unified",
 ].map((n) => `logbutler_${n}`);
 
+/** 計画書(plans/logbutler-m06-official-mcp-features.md)の 3 ツール。logvalet に無い(Nulab 公式 MCP から取り込み)。 */
+const M06_TOOLS = ["notification_list", "notification_count", "project_users"].map(
+  (n) => `logbutler_${n}`,
+);
+
 async function listTools(): Promise<McpToolListing[]> {
   const { result } = await rpcTo(
     () => createMcpServer({ getClient: () => fakeClient(), onBacklogUnauthorized: () => {} }),
@@ -116,11 +122,25 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールすべてを公開している", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール = 74 ツールを公開している", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
-    expect(names).toEqual([...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS, ...M05B_TOOLS].sort());
-    expect(names).toHaveLength(38 + 15 + 11 + 7);
-    expect(names).toHaveLength(71);
+    expect(names).toEqual(
+      [...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS, ...M05B_TOOLS, ...M06_TOOLS].sort(),
+    );
+    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3);
+    expect(names).toHaveLength(74);
+  });
+
+  it("M06 の 3 ツールは読み取り専用で、notification_* は notification、project_users は project の toolset", async () => {
+    const tools = await listTools();
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    for (const n of M06_TOOLS) {
+      expect(byName.get(n)?.annotations, n).toMatchObject({
+        readOnlyHint: true,
+        idempotentHint: true,
+      });
+    }
+    expect(byName.get("logbutler_notification_list")?.description).toMatch(/not mark/i);
   });
 
   it("書き込み・破壊的ツール 14 個のカテゴリ(annotation)が計画書どおり", async () => {
@@ -199,7 +219,7 @@ describe("tools/list スナップショット", () => {
     ]);
   });
 
-  it("許容した timezone 引数の差分は、9 ツールそれぞれ inputSchema.properties.timezone の追加だけ", async () => {
+  it("許容した timezone 引数の差分は、9 ツールそれぞれ inputSchema.properties.timezone の追加と max_response_tokens の追加だけ", async () => {
     const tools = [
       "issue_list",
       "my_tasks",
@@ -220,9 +240,40 @@ describe("tools/list スナップショット", () => {
     for (const c of result.changed) {
       const diffs = c.diffs.map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }));
       expect(diffs, c.name).toEqual([
+        { path: "inputSchema.properties.max_response_tokens", expected: undefined },
         { path: "inputSchema.properties.timezone", expected: undefined },
       ]);
     }
+  });
+
+  it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個を除く)にだけあり、差分は properties の追加だけ", async () => {
+    const tools = await listTools();
+    // 引数を持つツール = ReadOnly の annotation を持つツールからダウンロード系を除いたもの(M06 の 3 ツールを含む)
+    const withArg = tools
+      .filter((t) => "max_response_tokens" in (t.inputSchema.properties as object))
+      .map((t) => t.name)
+      .sort();
+    const readOnly = tools
+      .filter((t) => t.annotations?.readOnlyHint === true)
+      .map((t) => t.name)
+      .filter((n) => !/_attachment_download$|_shared_file_download$/.test(n))
+      .sort();
+    expect(withArg).toEqual(readOnly);
+    expect(withArg).toEqual([...RESPONSE_LIMIT_TOOLS, ...M06_TOOLS].sort());
+    expect(RESPONSE_LIMIT_TOOLS).toHaveLength(55);
+
+    const result = compareWithBaseline(
+      tools,
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: [...RESPONSE_LIMIT_TOOLS] },
+    );
+    for (const c of result.changed) {
+      const paths = c.diffs
+        .map((d) => `${d.field}.${d.path}`)
+        .filter((p) => p !== "inputSchema.properties.timezone");
+      expect(paths, c.name).toEqual(["inputSchema.properties.max_response_tokens"]);
+    }
+    expect(result.changed).toHaveLength(55);
   });
 
   it("baseline fixture は 71 ツールで、すべて logbutler_ に置換できる", () => {

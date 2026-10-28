@@ -4,7 +4,6 @@ import {
   CimdFetchError,
 } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
-import { type AccessIdentity, AccessJwtError, verifyAccessJwt } from "./auth/access-jwt";
 import {
   type BacklogOAuthConfig,
   BacklogOAuthError,
@@ -17,7 +16,7 @@ import { BacklogApiError, createBacklogClient } from "./backlog/client";
 import type { Env } from "./env";
 import { callbackUrl } from "./urls";
 
-type AppEnv = { Bindings: Env; Variables: { access: AccessIdentity } };
+type AppEnv = { Bindings: Env };
 
 const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8" } as const;
 
@@ -39,35 +38,11 @@ function errorPage(status: number, message: string): Response {
 /**
  * OAuthProvider の defaultHandler。/mcp・/token・/register・/.well-known/* は OAuthProvider が処理し、
  * ここには /authorize・/callback・/healthz などそれ以外が届く。
- * /authorize と /callback は Cloudflare Access で保護し、Worker 側でも JWT を検証する。
+ * 利用者の制限(Cloudflare Access など)は Logbutler の外側で行う(ADR 0009)。ここでは Access を扱わない。
  */
 export const app = new Hono<AppEnv>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
-
-// --- Cloudflare Access の JWT 検証(/authorize と /callback だけ)---
-app.use("/authorize", accessGuard);
-app.use("/callback", accessGuard);
-
-async function accessGuard(
-  c: import("hono").Context<AppEnv>,
-  next: () => Promise<void>,
-): Promise<Response | undefined> {
-  try {
-    const identity = await verifyAccessJwt(c.req.header("Cf-Access-Jwt-Assertion"), {
-      teamDomain: c.env.ACCESS_TEAM_DOMAIN,
-      aud: c.env.ACCESS_AUD,
-    });
-    c.set("access", identity);
-  } catch (e) {
-    // 理由は応答に出さない。JWT の中身もログに出さない。
-    const reason = e instanceof AccessJwtError ? e.reason : "error";
-    console.warn(`access jwt rejected: ${reason}`);
-    return c.text("Forbidden", 403);
-  }
-  await next();
-  return undefined;
-}
 
 // --- GET /authorize: 同意画面 ---
 app.get("/authorize", async (c) => {
@@ -83,7 +58,6 @@ app.get("/authorize", async (c) => {
         details,
         handle: consent.handle,
         backlogHost: c.env.BACKLOG_SPACE_HOST,
-        accessEmail: c.var.access.email,
       }),
       { headers },
     );
@@ -107,7 +81,6 @@ app.post("/authorize", async (c) => {
     const approved = await oauth.approveConsent(c.req.raw, handle);
     // 同意後にだけ上流(Backlog)へ送る。state は beginUpstream が発行しブラウザに束縛する。
     const { state, headers } = await oauth.beginUpstream(approved.request, {
-      data: { accessEmail: c.var.access.email },
       headers: approved.headers,
     });
     headers.set(
@@ -123,22 +96,17 @@ app.post("/authorize", async (c) => {
 // --- GET /callback: Backlog のコードをトークンに交換して認可を完了する ---
 app.get("/callback", async (c) => {
   const oauth = c.env.OAUTH_PROVIDER;
-  let resumed: Awaited<ReturnType<typeof oauth.finishUpstream<{ accessEmail: string }>>>;
+  let resumed: Awaited<ReturnType<typeof oauth.finishUpstream>>;
   try {
-    resumed = await oauth.finishUpstream<{ accessEmail: string }>(c.req.raw);
+    resumed = await oauth.finishUpstream(c.req.raw);
   } catch (e) {
     return renderAuthorizationFailure(e);
   }
-  const { request, data, headers } = resumed;
+  const { request, headers } = resumed;
   const redirectWith = (location: string) => {
     headers.set("Location", location);
     return new Response(null, { status: 302, headers });
   };
-
-  // /authorize を通った Access ユーザーと同じ人が戻ってきたことを確認する。
-  if (data?.accessEmail !== c.var.access.email) {
-    return errorPage(403, "Access identity changed during authorization. Start again.");
-  }
 
   const params = new URL(c.req.url).searchParams;
   if (params.get("error")) {
@@ -166,7 +134,6 @@ app.get("/callback", async (c) => {
       backlogRefreshToken: tokens.refreshToken,
       backlogExpiresAt: tokens.expiresAt,
       backlogUserId: me.id,
-      accessEmail: c.var.access.email,
     };
   } catch (e) {
     const transient =

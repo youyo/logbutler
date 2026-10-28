@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearJwksCache } from "../../src/auth/access-jwt";
 import {
-  accessHeaders,
   BACKLOG_HOST,
   BACKLOG_MYSELF,
   BACKLOG_TOKEN,
@@ -22,7 +20,6 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearJwksCache();
 });
 
 describe("E2E 1: 未認証の /mcp は 401 とディスカバリを返す", () => {
@@ -54,8 +51,8 @@ describe("E2E 1: 未認証の /mcp は 401 とディスカバリを返す", () =
 
 describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () => {
   it("アクセストークンを取得でき、同意画面は送信先を表示し、Backlog の認可 URL へ送る", async () => {
-    const { accessKey, callsTo } = await setupMocks();
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const { callsTo } = await setupMocks();
+    const flow = await runAuthorizationFlow();
 
     // 同意画面: クライアント名・送信先ホスト・Backlog のホストを表示する
     expect(flow.consent.status).toBe(200);
@@ -102,9 +99,8 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
   });
 
   it("同意画面で Deny すると access_denied でクライアントへ戻し、Backlog へは行かない", async () => {
-    const { accessKey, callsTo } = await setupMocks();
-    const access = await accessHeaders(accessKey);
-    const flow = await runAuthorizationFlow(access);
+    const { callsTo } = await setupMocks();
+    const flow = await runAuthorizationFlow();
     expect(flow.tokenResponse.status).toBe(200); // 前提の健全性
 
     // 別の認可リクエストで Deny
@@ -121,14 +117,13 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
       resource: MCP_URL,
     }).toString();
     const jar = new CookieJar();
-    const consent = await worker.fetch(url.toString(), { headers: access });
+    const consent = await worker.fetch(url.toString());
     jar.update(consent);
     const handle = /name="handle" value="([^"]+)"/.exec(await consent.text())?.[1] ?? "";
     const before = callsTo(BACKLOG_TOKEN).length;
     const denied = await worker.fetch(`${ORIGIN}/authorize`, {
       method: "POST",
       headers: {
-        ...access,
         Cookie: jar.header(),
         "Content-Type": "application/x-www-form-urlencoded",
       },
@@ -143,8 +138,7 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
   });
 
   it("Backlog が認可を拒否して error 付きで戻したら、クライアントへ access_denied を返す", async () => {
-    const { accessKey } = await setupMocks();
-    const access = await accessHeaders(accessKey);
+    await setupMocks();
     const clientId = await registerClient();
     const { challenge } = await pkcePair();
     const url = new URL(`${ORIGIN}/authorize`);
@@ -158,13 +152,12 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
       resource: MCP_URL,
     }).toString();
     const jar = new CookieJar();
-    const consent = await worker.fetch(url.toString(), { headers: access });
+    const consent = await worker.fetch(url.toString());
     jar.update(consent);
     const handle = /name="handle" value="([^"]+)"/.exec(await consent.text())?.[1] ?? "";
     const up = await worker.fetch(`${ORIGIN}/authorize`, {
       method: "POST",
       headers: {
-        ...access,
         Cookie: jar.header(),
         "Content-Type": "application/x-www-form-urlencoded",
       },
@@ -174,7 +167,7 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
     const state = new URL(up.headers.get("Location") ?? "").searchParams.get("state") ?? "";
     const cb = await worker.fetch(
       `${ORIGIN}/callback?error=access_denied&state=${encodeURIComponent(state)}`,
-      { headers: { ...access, Cookie: jar.header() } },
+      { headers: { Cookie: jar.header() } },
     );
     expect(cb.status).toBe(302);
     const loc = new URL(cb.headers.get("Location") ?? "");
@@ -186,8 +179,8 @@ describe("E2E 2: DCR → /authorize → Backlog → /callback → /token", () =>
 
 describe("E2E 3: 取得したトークンで /mcp が使える", () => {
   it("tools/list と tools/call logbutler_user_me が成功する", async () => {
-    const { accessKey, callsTo } = await setupMocks();
-    const flow = await runAuthorizationFlow(await accessHeaders(accessKey));
+    const { callsTo } = await setupMocks();
+    const flow = await runAuthorizationFlow();
     const { access_token } = (await flow.tokenResponse.json()) as TokenSet;
 
     const list = await mcpRequest(access_token, "tools/list");
@@ -195,7 +188,7 @@ describe("E2E 3: 取得したトークンで /mcp が使える", () => {
     const listBody = await readRpc(list);
     const names = (listBody.result?.tools ?? []).map((t: { name: string }) => t.name);
     expect(names).toContain("logbutler_user_me");
-    expect(names).toHaveLength(71); // M03: 読み取り 38 + M04: 書き込み 14 + project_conventions + M05A: 分析 11 + M05B: digest・検索 7
+    expect(names).toHaveLength(74); // M03: 読み取り 38 + M04: 書き込み 14 + project_conventions + M05A: 分析 11 + M05B: digest・検索 7 + M06: 3
 
     const call = await mcpRequest(access_token, "tools/call", {
       name: "logbutler_user_me",
