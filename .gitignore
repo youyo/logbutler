@@ -16,3 +16,6 @@ mise.local.toml
 
 # デプロイ用に生成する wrangler 設定(アカウント固有の値を含む。ADR 0011)
 wrangler.deploy*.jsonc
+
+# claude mcp add --scope project が作る接続設定(検証用 Worker の URL などアカウント固有の値を含む。ADR 0011)
+.mcp.json

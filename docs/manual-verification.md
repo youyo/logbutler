@@ -210,15 +210,15 @@ Logbutler の前段に Cloudflare MCP Server Portals を置く場合だけ実施
 
 - 出典: 計画書 M07 の (a)、[ADR 0002](adr/0002-single-worker-auth-and-mcp.md)
 - 手順: Portal の管理画面で、サーバー URL `https://<domain>/mcp` を、認証方式 **OAuth**(クライアントは DCR で自動登録)、**Require user auth** を有効にして登録する。登録後、ツールの同期(一覧の取得)を実行する。
-- 期待結果: 登録が通り、ツールが同期される(`toolsets` なしで 74 個)。同期にユーザーの認可が要る場合は、その操作が P2 の手順になる。
-- 結果: 登録 [ OK / NG ] ／ 同期されたツール数 [ ] ／ メモ:
+- 期待結果: 登録が通り、ツールが同期される(`toolsets` なしで 86 個。M07 時点の 74 個から、通知系・`project_users`・プロジェクト設定 12 個などが増えた)。同期にユーザーの認可が要る場合は、その操作が P2 の手順になる。
+- 結果: 登録 [ **OK** ] ／ 同期されたツール数 [ **86** ] ／ メモ: 2026-10-29、利用者の Cloudflare アカウントの Portal `<portal-host>` に、検証用 Worker の `/mcp` を Terraform(別リポジトリ cloudflare-infra)で登録。設定は `auth_type = "oauth"`、Portal の `on_behalf = true`(Require user auth)。API で作った直後は `status: waiting` / `authentication_status: required`(管理者の資格がないため)。ダッシュボードの MCP servers から管理者が一度認証(Logbutler の同意画面 → Backlog のログイン)すると、`status: ready` / `authentication_status: connected` になり、ツール 86 個が同期された。
 
 ### P2 各ユーザーが Portal の Connect から自分の Backlog アカウントで認可できること
 
 - 出典: 計画書 M07 の (b)、[ADR 0008](adr/0008-client-side-control-and-mcp-2026.md)(DCR)
 - 手順: 別々の 2 人のユーザー(または 2 つの Backlog アカウント)が、Portal の Connect から認可する。Workers Logs で `/register` のリクエストを見て、DCR の `redirect_uris` に Portal のコールバック `https://<portal-host>/servers-callback` が入っていること、`application_type` や `scope` の有無を記録する。各ユーザーで `logbutler_user_me` を呼ぶ。
 - 期待結果: 各ユーザーが自分の Backlog アカウントでログイン・同意でき、`user_me` が**それぞれ自分の** Backlog ユーザーを返す(他人の情報にならない)。DCR は 201 で成功する。
-- 結果: DCR の `redirect_uris` [ ] ／ `application_type` [ なし / ] ／ `scope` [ なし / ] ／ 1 人目の `user_me.id` [ ] ／ 2 人目 [ ] ／ 判定 [ OK / NG ] ／ メモ:
+- 結果: DCR の `redirect_uris` [ 未記録 ] ／ `application_type` [ 未記録 ] ／ `scope` [ 未記録 ] ／ 1 人目の `user_me.id` [ 未記録 ] ／ 2 人目 [ 未実施 ] ／ 判定 [ **一部 OK**(1 人のみ) ] ／ メモ: 2026-10-29、利用者 1 人(管理者と同じ人)が Claude Code から claude.ai のコネクタ経由で Portal(`<portal-host>`)に接続し直し、Logbutler のツールが見えることを確認した。DCR の中身は記録していない(認可時に `wrangler tail` を止めていた)。2 人目(別の Backlog アカウント)での確認は未実施。
 
 ### P3 Portal がクエリ付き URL(`?toolsets=...&read_only=true`)を保持するか
 
@@ -240,7 +240,7 @@ Logbutler の前段に Cloudflare MCP Server Portals を置く場合だけ実施
 - 出典: 計画書 M07 の (e)、[ADR 0009](adr/0009-remove-cloudflare-access.md)(公式ドキュメントが「自前の OAuth を持つサーバーには使わない」と明記)
 - 手順: Logbutler を保護する Access アプリ(あれば)の設定で Managed OAuth が**無効**であることを確認する。
 - 期待結果: 無効。有効だと Logbutler 自身の OAuth(DCR / `/authorize` / `/token`)と二重になり、接続が壊れうる。
-- 結果: Managed OAuth [ 無効 / 有効(要修正)] ／ メモ:
+- 結果: Managed OAuth [ **無効** ] ／ メモ: 2026-10-29、Portal 経由の Access アプリ(mcp 型、`via_mcp_server_portal`)を Terraform で作成し、`oauth_configuration` を設定していない(apply 後の plan も差分なし)。Logbutler の Worker を直接守る Access アプリはない(ADR 0009)。Portal 自体のアプリ(`mcp_portal` 型)の OAuth は Portal とクライアントの間のもので、Logbutler の OAuth とは別。
 
 ---
 
