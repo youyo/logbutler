@@ -119,6 +119,22 @@ describe("request: 認証・クエリ・フォーム", () => {
     expect(new URLSearchParams(m.calls[0]?.body).get("statusId")).toBe("3");
   });
 
+  it("multipart: FormData をそのまま本文にし、Content-Type(boundary 付き)は fetch に任せる", async () => {
+    const m = mockOutboundFetch({
+      "POST https://example.backlog.com/api/v2/space/attachment": () => jsonResponse({ id: 9 }),
+    });
+    const fd = new FormData();
+    fd.append("file", new Blob(["hello world"]), "memo.txt");
+    await make().request("POST", "/space/attachment", { multipart: fd });
+    const call = m.calls[0];
+    expect(call?.method).toBe("POST");
+    expect(call?.headers.get("authorization")).toBe("Bearer at-1");
+    expect(call?.headers.get("content-type")).toMatch(/^multipart\/form-data; boundary=/);
+    expect(call?.body).toContain('name="file"; filename="memo.txt"');
+    expect(call?.body).toContain("hello world");
+    expect(new URL(call?.url ?? "").search).toBe("");
+  });
+
   it("応答本文が空(204)なら undefined を返す", async () => {
     mockOutboundFetch({ [PATCH_ISSUE]: () => new Response(null, { status: 204 }) });
     await expect(make().request("PATCH", "/issues/PROJ-1")).resolves.toBeUndefined();

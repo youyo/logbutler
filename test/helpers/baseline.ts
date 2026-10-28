@@ -136,9 +136,16 @@ export function formatCompareResult(r: CompareResult): string {
 
 /**
  * logvalet の差分として許容している項目。M03 以降、移植時に差分が出たらここへ理由つきで足す。
- * M02 では差分なし。
+ * M04 で issue_attachment_upload の file_paths 削除を足した（docs/tool-diff-from-logvalet.md にも記載）。
  */
-export const ALLOWED_CHANGES: readonly AllowedChange[] = [];
+export const ALLOWED_CHANGES: readonly AllowedChange[] = [
+  {
+    tool: "logbutler_issue_attachment_upload",
+    fields: ["description", "inputSchema"],
+    reason:
+      "file_paths（サーバー上のファイルパス）は Workers にファイルシステムがないためスキーマから削除し、base64 のみにした（M04 の決定済み事項）。説明文と file_content_base64 の説明から file_paths への言及も除いた。差分の範囲は test/unit/tools-list-snapshot.test.ts で固定している。",
+  },
+];
 export const ALLOWED_MISSING: readonly string[] = [];
 export const ALLOWED_EXTRA: readonly string[] = [];
 

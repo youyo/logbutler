@@ -36,6 +36,43 @@
     }
   },
   {
+    "name": "logbutler_document_create",
+    "description": "Create a new document in a project",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "Document content (markdown)",
+          "type": "string"
+        },
+        "parent_id": {
+          "description": "Parent document ID (optional)",
+          "type": "string"
+        },
+        "project_id": {
+          "description": "Project ID (numeric)",
+          "type": "number"
+        },
+        "title": {
+          "description": "Document title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "project_id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ドキュメント作成"
+    }
+  },
+  {
     "name": "logbutler_document_get",
     "description": "Get document by document ID",
     "inputSchema": {
@@ -110,6 +147,34 @@
     }
   },
   {
+    "name": "logbutler_issue_attachment_delete",
+    "description": "Delete an attachment from an issue",
+    "inputSchema": {
+      "properties": {
+        "attachment_id": {
+          "description": "Attachment ID",
+          "type": "number"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attachment_id",
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "添付ファイル削除"
+    }
+  },
+  {
     "name": "logbutler_issue_attachment_download",
     "description": "Download an attachment from an issue (max 20MB, returned as base64)",
     "inputSchema": {
@@ -159,6 +224,76 @@
     }
   },
   {
+    "name": "logbutler_issue_attachment_upload",
+    "description": "Upload a file and attach it to an issue. Specify file_name + file_content_base64 (inline base64 content, decoded size <= 4MB). mime_type is currently advisory and not forwarded to Backlog.",
+    "inputSchema": {
+      "properties": {
+        "file_content_base64": {
+          "description": "Base64-encoded file content for inline upload. Decoded size must be <= 4MB.",
+          "type": "string"
+        },
+        "file_name": {
+          "description": "File name for inline upload (e.g. asset9.png). Required when file_content_base64 is set.",
+          "type": "string"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "mime_type": {
+          "description": "MIME type hint (e.g. image/png). Advisory only; Backlog determines content type from filename.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "添付ファイルアップロード"
+    }
+  },
+  {
+    "name": "logbutler_issue_comment_add",
+    "description": "Add a comment to an issue",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Alias for content",
+          "type": "string"
+        },
+        "content": {
+          "description": "Comment content (alias: body)",
+          "type": "string"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "notified_user_ids": {
+          "description": "Comma-separated user IDs to notify",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "課題コメント追加"
+    }
+  },
+  {
     "name": "logbutler_issue_comment_list",
     "description": "List comments for an issue",
     "inputSchema": {
@@ -186,6 +321,119 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "課題コメント一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_comment_update",
+    "description": "Update a comment on an issue",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Alias for content",
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "Comment ID",
+          "type": "number"
+        },
+        "content": {
+          "description": "New comment content (alias: body)",
+          "type": "string"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comment_id",
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "課題コメント更新"
+    }
+  },
+  {
+    "name": "logbutler_issue_create",
+    "description": "Create a new issue",
+    "inputSchema": {
+      "properties": {
+        "assignee_id": {
+          "description": "Assignee user ID",
+          "type": "number"
+        },
+        "category_ids": {
+          "description": "Comma-separated category IDs (e.g. \"10,20\")",
+          "type": "string"
+        },
+        "description": {
+          "description": "Issue description",
+          "type": "string"
+        },
+        "due_date": {
+          "description": "Due date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "engagement": {
+          "description": "Engagement name; sets both the engagement category and the parent issue",
+          "type": "string"
+        },
+        "issue_type_id": {
+          "description": "Issue type ID",
+          "type": "number"
+        },
+        "milestone_ids": {
+          "description": "Comma-separated milestone IDs",
+          "type": "string"
+        },
+        "notified_user_ids": {
+          "description": "Comma-separated user IDs to notify",
+          "type": "string"
+        },
+        "parent_issue_id": {
+          "description": "Parent issue ID for creating a child issue",
+          "type": "number"
+        },
+        "priority_id": {
+          "description": "Priority ID",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "Start date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Issue summary",
+          "type": "string"
+        },
+        "version_ids": {
+          "description": "Comma-separated version IDs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_type_id",
+        "project_key",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "課題作成"
     }
   },
   {
@@ -283,6 +531,62 @@
     }
   },
   {
+    "name": "logbutler_issue_related_add",
+    "description": "Add a related issue to an issue. target_issue_id is the numeric issue ID (not the issue key).",
+    "inputSchema": {
+      "properties": {
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "target_issue_id": {
+          "description": "Numeric ID of the issue to relate (not the issue key)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "issue_key",
+        "target_issue_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "関連課題追加"
+    }
+  },
+  {
+    "name": "logbutler_issue_related_delete",
+    "description": "Delete a related issue link from an issue. related_issue_id is the relation ID returned by logvalet_issue_related_list.",
+    "inputSchema": {
+      "properties": {
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "related_issue_id": {
+          "description": "Relation ID to delete (from logvalet_issue_related_list)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "issue_key",
+        "related_issue_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "関連課題削除"
+    }
+  },
+  {
     "name": "logbutler_issue_related_list",
     "description": "List related issues for an issue",
     "inputSchema": {
@@ -302,6 +606,89 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "関連課題一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_update",
+    "description": "Update an existing issue",
+    "inputSchema": {
+      "properties": {
+        "assignee_id": {
+          "description": "Assignee user ID",
+          "type": "number"
+        },
+        "category_ids": {
+          "description": "Comma-separated category IDs (e.g. \"10,20\")",
+          "type": "string"
+        },
+        "comment": {
+          "description": "Comment to add with the update",
+          "type": "string"
+        },
+        "description": {
+          "description": "New description",
+          "type": "string"
+        },
+        "due_date": {
+          "description": "Due date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "engagement": {
+          "description": "Engagement name; sets both the engagement category and the parent issue",
+          "type": "string"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "issue_type_id": {
+          "description": "Issue type ID",
+          "type": "number"
+        },
+        "milestone_ids": {
+          "description": "Comma-separated milestone IDs",
+          "type": "string"
+        },
+        "notified_user_ids": {
+          "description": "Comma-separated user IDs to notify",
+          "type": "string"
+        },
+        "parent_issue_id": {
+          "description": "Parent issue ID (0 to remove parent)",
+          "type": "number"
+        },
+        "priority_id": {
+          "description": "Priority ID",
+          "type": "number"
+        },
+        "start_date": {
+          "description": "Start date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "status_id": {
+          "description": "Status ID",
+          "type": "number"
+        },
+        "summary": {
+          "description": "New summary",
+          "type": "string"
+        },
+        "version_ids": {
+          "description": "Comma-separated version IDs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "課題更新"
     }
   },
   {
@@ -412,6 +799,28 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "バージョン一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_project_conventions",
+    "description": "Show the operating conventions adopted by a project (rule issue), with a glossary",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "運用規約取得"
     }
   },
   {
@@ -543,6 +952,43 @@
     }
   },
   {
+    "name": "logbutler_star_add",
+    "description": "Add a star to an issue, comment, wiki, pull request, or pull request comment. Specify exactly one of: issue_id, comment_id, wiki_id, pull_request_id, pull_request_comment_id",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID to star",
+          "type": "number"
+        },
+        "issue_id": {
+          "description": "Issue ID to star",
+          "type": "number"
+        },
+        "pull_request_comment_id": {
+          "description": "Pull request comment ID to star",
+          "type": "number"
+        },
+        "pull_request_id": {
+          "description": "Pull request ID to star",
+          "type": "number"
+        },
+        "wiki_id": {
+          "description": "Wiki ID to star",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "スター追加"
+    }
+  },
+  {
     "name": "logbutler_team_get",
     "description": "Get team details by team ID",
     "inputSchema": {
@@ -667,6 +1113,33 @@
     }
   },
   {
+    "name": "logbutler_watching_add",
+    "description": "Add a watching for an issue. Returns the created watching.",
+    "inputSchema": {
+      "properties": {
+        "issue_id_or_key": {
+          "description": "Issue ID or key (e.g., PROJ-123) (required)",
+          "type": "string"
+        },
+        "note": {
+          "description": "Optional note for the watching",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_id_or_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ウォッチ追加"
+    }
+  },
+  {
     "name": "logbutler_watching_count",
     "description": "Get the count of watchings for a user.",
     "inputSchema": {
@@ -686,6 +1159,29 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "ウォッチ数取得"
+    }
+  },
+  {
+    "name": "logbutler_watching_delete",
+    "description": "Delete a watching by watching ID. Returns the deleted watching.",
+    "inputSchema": {
+      "properties": {
+        "watching_id": {
+          "description": "Watching ID (required)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "watching_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ウォッチ削除"
     }
   },
   {
@@ -746,6 +1242,57 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "ウォッチ一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_watching_mark_as_read",
+    "description": "Mark a watching as read by watching ID.",
+    "inputSchema": {
+      "properties": {
+        "watching_id": {
+          "description": "Watching ID (required)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "watching_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ウォッチ既読化"
+    }
+  },
+  {
+    "name": "logbutler_watching_update",
+    "description": "Update the note of a watching.",
+    "inputSchema": {
+      "properties": {
+        "note": {
+          "description": "New note for the watching (required)",
+          "type": "string"
+        },
+        "watching_id": {
+          "description": "Watching ID (required)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "note",
+        "watching_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ウォッチ更新"
     }
   },
   {

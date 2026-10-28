@@ -39,6 +39,8 @@ export type Params = Record<string, ParamValue | readonly ParamValue[]>;
 export interface RequestOptions {
   query?: Params;
   form?: Params;
+  /** multipart/form-data の本文(添付ファイルのアップロード用)。Content-Type は boundary 付きで fetch が決める。form とは併用しない。 */
+  multipart?: FormData;
 }
 
 export interface DownloadedFile {
@@ -181,8 +183,10 @@ export function createBacklogClient(opts: BacklogClientOptions): BacklogClient {
       Authorization: `Bearer ${opts.accessToken}`,
       Accept: accept,
     };
-    let body: string | undefined;
-    if (options.form) {
+    let body: string | FormData | undefined;
+    if (options.multipart) {
+      body = options.multipart;
+    } else if (options.form) {
       const form = new URLSearchParams();
       appendParams(form, options.form);
       body = form.toString();

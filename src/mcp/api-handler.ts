@@ -5,6 +5,7 @@ import type { Env } from "../env";
 import { ConfigError } from "../errors";
 import { MCP_PATH, protectedResourceMetadataUrl } from "../urls";
 import { parseToolConfig } from "./registry";
+import { callMcpHandler } from "./request-body";
 import { createMcpServer } from "./server";
 
 /**
@@ -43,6 +44,8 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
               }),
             toolConfig,
             timezone: env.LOGBUTLER_TIMEZONE,
+            // 冪等キャッシュは OAUTH_KV の `idem:` 接頭辞のキーに置く（ADR 0005）。
+            idempotency: { kv: env.OAUTH_KV, userId: props.backlogUserId },
             onBacklogUnauthorized: () => {
               backlogUnauthorized = true;
             },
@@ -50,7 +53,7 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
         { route: MCP_PATH },
       );
 
-      const response = await handler(request, env, ctx);
+      const response = await callMcpHandler(handler, request);
 
       // ステートレスの tools/call は 1 回の応答で終わる。Backlog の 401 を HTTP の 401 に変換するため、
       // POST の応答は(SSE でも)ここで読み切ってから判定する。

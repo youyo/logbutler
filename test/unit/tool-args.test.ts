@@ -165,6 +165,13 @@ describe("dateRangeFor", () => {
       expect(m).toContain("YYYY-MM-DD");
     }
   });
+  it("最初の ':' だけで分ける。右側に ':' が残れば argument_error(logvalet の SplitN と同じ)", () => {
+    for (const bad of ["2026-01-01:2026-01-02:x", "2026-01-01:2026-01-02:", "::", "a:b:c"]) {
+      const m = argErr(() => dateRangeFor("due_date", bad, today));
+      expect(m).toContain("due_date");
+      expect(m).toContain("YYYY-MM-DD");
+    }
+  });
   it("年またぎ(1/1 の this-week)", () => {
     expect(dateRangeFor("due_date", "this-week", { y: 2026, m: 1, d: 1 })).toEqual({
       since: "2025-12-29",

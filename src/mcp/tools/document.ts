@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { optInt, positiveOrUndefined, reqStr, resolveProjectId, seg } from "../args";
+import {
+  nonEmpty,
+  optInt,
+  optStr,
+  positiveOrUndefined,
+  reqInt,
+  reqStr,
+  requireId,
+  resolveProjectId,
+  seg,
+} from "../args";
 import { defineTool } from "../registry";
 
 export const documentGet = defineTool({
@@ -45,4 +55,24 @@ export const documentTree = defineTool({
   inputSchema: z.object({ project_key: reqStr("Project key") }),
   handler: ({ project_key }, { client }) =>
     client.request("GET", "/documents/tree", { query: { projectIdOrKey: project_key } }),
+});
+
+export const documentCreate = defineTool({
+  name: "logbutler_document_create",
+  title: "ドキュメント作成",
+  description: "Create a new document in a project",
+  category: "WriteNonIdempotent",
+  toolset: "document",
+  inputSchema: z.object({
+    project_id: reqInt("Project ID (numeric)"),
+    title: reqStr("Document title"),
+    content: reqStr("Document content (markdown)"),
+    parent_id: optStr("Parent document ID (optional)"),
+  }),
+  handler: ({ project_id, title, content, parent_id }, { client }) => {
+    requireId("project_id", project_id);
+    return client.request("POST", "/documents", {
+      form: { projectId: project_id, title, content, parentId: nonEmpty(parent_id) },
+    });
+  },
 });

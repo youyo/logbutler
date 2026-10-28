@@ -3,6 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { expect } from "vitest";
 import type { BacklogClient } from "../../src/backlog/client";
 import type { BacklogUser } from "../../src/backlog/types";
+import { callMcpHandler } from "../../src/mcp/request-body";
 import type { RpcResponse } from "./oauth-flow";
 
 /** 応答は JSON または SSE(`data: {...}` 行)のどちらでも来る。 */
@@ -17,12 +18,6 @@ export function parseRpcResponse(text: string): RpcResponse {
   return JSON.parse(data ?? "null");
 }
 
-const ctx = {
-  waitUntil() {},
-  passThroughOnException() {},
-  props: {},
-} as unknown as ExecutionContext;
-
 /** McpServer のファクトリに JSON-RPC を 1 件送り、応答を返す(HTTP 層は createMcpHandler を通る)。 */
 export async function rpcTo(
   factory: () => McpServer,
@@ -30,7 +25,8 @@ export async function rpcTo(
   params: Record<string, unknown> = {},
 ): Promise<RpcResponse> {
   const handler = createMcpHandler(factory, { route: "/mcp" });
-  const res = await handler(
+  const res = await callMcpHandler(
+    handler,
     new Request("https://logbutler.test/mcp", {
       method: "POST",
       headers: {
@@ -39,11 +35,10 @@ export async function rpcTo(
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     }),
-    {},
-    ctx,
   );
-  expect(res.status).toBe(200);
-  return parseRpcResponse(await res.text());
+  const text = await res.text();
+  expect(res.status, text.slice(0, 300)).toBe(200);
+  return parseRpcResponse(text);
 }
 
 /** テスト用のクライアント。呼ばれたくないメソッドは例外にする。 */

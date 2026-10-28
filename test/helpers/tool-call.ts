@@ -1,5 +1,6 @@
 import { expect } from "vitest";
 import { createBacklogClient } from "../../src/backlog/client";
+import type { IdempotencyDeps } from "../../src/mcp/idempotency";
 import { createMcpServer } from "../../src/mcp/server";
 import { rpcTo } from "./mcp";
 import { jsonResponse, mockOutboundFetch, type RecordedCall } from "./mock-fetch";
@@ -24,6 +25,14 @@ export function describeCall(call: RecordedCall): string {
   return `${call.method} ${url.pathname.replace(/^\/api\/v2/, "")}${pairs.length ? `?${pairs.join("&")}` : ""}`;
 }
 
+/** フォーム本文（application/x-www-form-urlencoded）を `key=value` の配列にする。キー順にそろえる（同じキーは送った順）。 */
+export function formPairs(call: RecordedCall | undefined): string[] {
+  return [...new URLSearchParams(call?.body ?? "").entries()]
+    .map((entry, i) => ({ entry, i }))
+    .sort((a, b) => (a.entry[0] < b.entry[0] ? -1 : a.entry[0] > b.entry[0] ? 1 : a.i - b.i))
+    .map(({ entry: [k, v] }) => `${k}=${v}`);
+}
+
 export interface ToolRun {
   isError: boolean;
   text: string;
@@ -42,7 +51,14 @@ export async function callTool(
   name: string,
   args: Record<string, unknown>,
   respond: Record<string, Respond>,
-  opts: { now?: Date; timezone?: string } = {},
+  opts: {
+    now?: Date;
+    timezone?: string;
+    /** WriteNonIdempotent の冪等キャッシュ(省略時はキャッシュなし)。 */
+    idempotency?: IdempotencyDeps;
+    /** tools/call の params._meta。 */
+    meta?: Record<string, unknown>;
+  } = {},
 ): Promise<ToolRun> {
   const handlers = Object.fromEntries(
     Object.entries(respond).map(([key, value]) => {
@@ -66,9 +82,10 @@ export async function callTool(
         onBacklogUnauthorized: () => {},
         now: opts.now ? () => opts.now as Date : undefined,
         timezone: opts.timezone,
+        idempotency: opts.idempotency,
       }),
     "tools/call",
-    { name, arguments: args },
+    { name, arguments: args, ...(opts.meta ? { _meta: opts.meta } : {}) },
   );
   const text = firstText(res);
   let json: unknown;

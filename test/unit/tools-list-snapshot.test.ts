@@ -55,6 +55,25 @@ const M03_TOOLS = [
   "wiki_sharedfile_list",
 ].map((n) => `logbutler_${n}`);
 
+/** 計画書(plans/logbutler-m04-write-tools.md)の対象ツール。project_conventions は M05 から前倒し。 */
+const M04_TOOLS = [
+  "issue_create",
+  "issue_comment_add",
+  "issue_attachment_upload",
+  "document_create",
+  "issue_update",
+  "issue_comment_update",
+  "issue_related_add",
+  "star_add",
+  "watching_add",
+  "watching_update",
+  "watching_mark_as_read",
+  "issue_related_delete",
+  "issue_attachment_delete",
+  "watching_delete",
+  "project_conventions",
+].map((n) => `logbutler_${n}`);
+
 async function listTools(): Promise<McpToolListing[]> {
   const { result } = await rpcTo(
     () => createMcpServer({ getClient: () => fakeClient(), onBacklogUnauthorized: () => {} }),
@@ -71,18 +90,48 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の対象 38 ツールを公開している(加工系 19 と書き込みは含まない)", async () => {
+  it("M03 の 38 ツールと M04 の 15 ツールを公開している(加工系の分析・digest は含まない)", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
-    expect(names).toEqual([...M03_TOOLS].sort());
-    expect(names).toHaveLength(38);
+    expect(names).toEqual([...M03_TOOLS, ...M04_TOOLS].sort());
+    expect(names).toHaveLength(38 + 15);
   });
 
-  it("logvalet の baseline と比べて、38 ツールすべてで差分がない(許容リストの分を除く)", async () => {
+  it("書き込み・破壊的ツール 14 個のカテゴリ(annotation)が計画書どおり", async () => {
+    const byName = new Map((await listTools()).map((t) => [t.name, t.annotations]));
+    const kind = (n: string) => {
+      const a = byName.get(`logbutler_${n}`) as Record<string, boolean> | undefined;
+      if (a?.readOnlyHint) return "ReadOnly";
+      if (a?.destructiveHint) return "Destructive";
+      return a?.idempotentHint ? "WriteIdempotent" : "WriteNonIdempotent";
+    };
+    for (const n of [
+      "issue_create",
+      "issue_comment_add",
+      "issue_attachment_upload",
+      "document_create",
+    ])
+      expect(kind(n), n).toBe("WriteNonIdempotent");
+    for (const n of [
+      "issue_update",
+      "issue_comment_update",
+      "issue_related_add",
+      "star_add",
+      "watching_add",
+      "watching_update",
+      "watching_mark_as_read",
+    ])
+      expect(kind(n), n).toBe("WriteIdempotent");
+    for (const n of ["issue_related_delete", "issue_attachment_delete", "watching_delete"])
+      expect(kind(n), n).toBe("Destructive");
+    expect(kind("project_conventions")).toBe("ReadOnly");
+  });
+
+  it("logvalet の baseline と比べて、53 ツールすべてで差分がない(許容リストの分を除く)", async () => {
     const result = compareWithBaseline(
       await listTools(),
       fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
       {
-        only: M03_TOOLS,
+        only: [...M03_TOOLS, ...M04_TOOLS],
         allowedChanges: ALLOWED_CHANGES,
         allowedMissing: ALLOWED_MISSING,
         allowedExtra: ALLOWED_EXTRA,
@@ -91,6 +140,22 @@ describe("tools/list スナップショット", () => {
     // 失敗したときに、どのツールのどの property が違うかが読めるようにする。
     expect(formatCompareResult(result)).toBe("");
     expect(result).toEqual({ missing: [], extra: [], changed: [] });
+  });
+
+  it("許容した issue_attachment_upload の差分は、file_paths の削除に伴う 3 か所だけ", async () => {
+    const result = compareWithBaseline(
+      await listTools(),
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: ["logbutler_issue_attachment_upload"] },
+    );
+    const where = result.changed.flatMap((c) =>
+      c.diffs.map((d) => (d.path === "" ? d.field : `${d.field}.${d.path}`)),
+    );
+    expect(where.sort()).toEqual([
+      "description",
+      "inputSchema.properties.file_content_base64.description",
+      "inputSchema.properties.file_paths",
+    ]);
   });
 
   it("baseline fixture は 71 ツールで、すべて logbutler_ に置換できる", () => {

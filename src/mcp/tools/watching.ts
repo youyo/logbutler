@@ -6,6 +6,8 @@ import {
   positiveOrUndefined,
   reqInt,
   reqStr,
+  reqText,
+  requireId,
   resolveUserId,
   seg,
 } from "../args";
@@ -56,4 +58,63 @@ export const watchingCount = defineTool({
   inputSchema: z.object({ user_id: reqInt("User ID (required)") }),
   handler: ({ user_id }, { client }) =>
     client.request("GET", `/users/${seg(user_id)}/watchings/count`),
+});
+
+export const watchingAdd = defineTool({
+  name: "logbutler_watching_add",
+  title: "ウォッチ追加",
+  description: "Add a watching for an issue. Returns the created watching.",
+  category: "WriteIdempotent",
+  toolset: "watching",
+  inputSchema: z.object({
+    issue_id_or_key: reqStr("Issue ID or key (e.g., PROJ-123) (required)"),
+    note: optStr("Optional note for the watching"),
+  }),
+  handler: ({ issue_id_or_key, note }, { client }) =>
+    client.request("POST", "/watchings", {
+      form: { issueIdOrKey: issue_id_or_key, note: note || undefined },
+    }),
+});
+
+export const watchingUpdate = defineTool({
+  name: "logbutler_watching_update",
+  title: "ウォッチ更新",
+  description: "Update the note of a watching.",
+  category: "WriteIdempotent",
+  toolset: "watching",
+  inputSchema: z.object({
+    watching_id: reqInt("Watching ID (required)"),
+    note: reqText("New note for the watching (required)"),
+  }),
+  handler: ({ watching_id, note }, { client }) => {
+    requireId("watching_id", watching_id);
+    return client.request("PATCH", `/watchings/${seg(watching_id)}`, { form: { note } });
+  },
+});
+
+export const watchingDelete = defineTool({
+  name: "logbutler_watching_delete",
+  title: "ウォッチ削除",
+  description: "Delete a watching by watching ID. Returns the deleted watching.",
+  category: "Destructive",
+  toolset: "watching",
+  inputSchema: z.object({ watching_id: reqInt("Watching ID (required)") }),
+  handler: ({ watching_id }, { client }) => {
+    requireId("watching_id", watching_id);
+    return client.request("DELETE", `/watchings/${seg(watching_id)}`);
+  },
+});
+
+export const watchingMarkAsRead = defineTool({
+  name: "logbutler_watching_mark_as_read",
+  title: "ウォッチ既読化",
+  description: "Mark a watching as read by watching ID.",
+  category: "WriteIdempotent",
+  toolset: "watching",
+  inputSchema: z.object({ watching_id: reqInt("Watching ID (required)") }),
+  handler: async ({ watching_id }, { client }) => {
+    requireId("watching_id", watching_id);
+    await client.request("POST", `/watchings/${seg(watching_id)}/markAsRead`);
+    return { result: "ok" };
+  },
 });

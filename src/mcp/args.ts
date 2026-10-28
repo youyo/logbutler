@@ -18,6 +18,8 @@ export const reqStr = (description: string) =>
     .string()
     .refine((s) => s.trim() !== "", "must not be empty")
     .describe(description);
+/** 必須の文字列（空文字も可。note のように「空にする」ことに意味があるもの）。 */
+export const reqText = (description: string) => z.string().describe(description);
 /** 任意の文字列。 */
 export const optStr = (description: string) => z.string().describe(description).optional();
 /** 必須の整数 ID(JSON Schema 上は number)。 */
@@ -28,6 +30,17 @@ export const optInt = (description: string) =>
   z.number().refine(isInt, "must be an integer").describe(description).optional();
 /** 任意の真偽値。 */
 export const optBool = (description: string) => z.boolean().describe(description).optional();
+
+/** ID が 0（未指定）なら argument_error。logvalet の `id == 0` の検査と同じ。 */
+export function requireId(name: string, value: number): number {
+  if (value === 0) throw new ArgumentError(`${name} is required`);
+  return value;
+}
+
+/** 空文字でない任意の文字列だけを残す。 */
+export function nonEmpty(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
+}
 
 // --- パスとクエリ ---
 
@@ -183,7 +196,10 @@ export function dateRangeFor(
   }
 
   if (input.includes(":")) {
-    const [left = "", right = ""] = input.split(":", 2).map((s) => s.trim());
+    // 最初の ':' だけで分ける。右側に ':' が残れば日付として読めず invalid になる(logvalet の SplitN)。
+    const at = input.indexOf(":");
+    const left = input.slice(0, at).trim();
+    const right = input.slice(at + 1).trim();
     if (left === "" && right === "") throw invalid();
     if ((left !== "" && !validYmd(left)) || (right !== "" && !validYmd(right))) throw invalid();
     return {

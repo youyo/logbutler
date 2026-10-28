@@ -6,6 +6,12 @@ import type { McpServer, StandardSchemaWithJSON } from "@modelcontextprotocol/se
 import type { z } from "zod";
 import { type BacklogClient, BacklogUnauthorizedError } from "../backlog/client";
 import { ArgumentError, ConfigError, LogbutlerError, toErrorEnvelope } from "../errors";
+import {
+  explicitKeyFrom,
+  type IdempotencyDeps,
+  idempotencyCacheKey,
+  withIdempotency,
+} from "./idempotency";
 
 /** logvalet の 4 区分(`internal/mcp/tool_categories.go`)。 */
 export type ToolCategory = "ReadOnly" | "WriteIdempotent" | "WriteNonIdempotent" | "Destructive";
@@ -185,6 +191,8 @@ export interface RegisterDeps {
   now?: () => Date;
   /** 「今日」の基準タイムゾーン。省略時は DEFAULT_TIMEZONE。 */
   timezone?: string;
+  /** WriteNonIdempotent ツールの冪等キャッシュ(KV とユーザー ID)。省略時はキャッシュしない。 */
+  idempotency?: IdempotencyDeps;
 }
 
 function textResult(text: string, isError = false) {
@@ -244,17 +252,33 @@ export function registerTools(
         inputSchema: advertiseOnly(tool.inputSchema),
         annotations: tool.annotations,
       },
-      async (args: unknown) => {
+      async (args: unknown, mcpCtx) => {
         let client: BacklogClient | undefined;
         try {
           const parsed = tool.inputSchema.safeParse(args ?? {});
           if (!parsed.success) throw new ArgumentError(describeIssues(parsed.error));
           client = deps.getClient();
-          const result = await tool.handler(parsed.data, {
+          const toolCtx: ToolContext = {
             client,
             now: deps.now ?? (() => new Date()),
             timezone: deps.timezone || DEFAULT_TIMEZONE,
-          });
+          };
+          if (tool.category === "WriteNonIdempotent" && deps.idempotency) {
+            // 明示キーは inputSchema に宣言しないので、zod の検証前の生の引数と params._meta から取る。
+            const explicit = explicitKeyFrom(mcpCtx?.mcpReq?._meta, args);
+            const key = await idempotencyCacheKey(
+              deps.idempotency.userId,
+              tool.name,
+              explicit,
+              parsed.data,
+            );
+            return textResult(
+              await withIdempotency(deps.idempotency, key, () =>
+                tool.handler(parsed.data, toolCtx),
+              ),
+            );
+          }
+          const result = await tool.handler(parsed.data, toolCtx);
           return textResult(JSON.stringify(result ?? null));
         } catch (e) {
           if (e instanceof BacklogUnauthorizedError) deps.onBacklogUnauthorized();
