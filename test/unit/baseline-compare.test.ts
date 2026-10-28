@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareWithBaseline,
+  formatCompareResult,
   fromLogvaletBaseline,
   type McpToolListing,
   normalizeTools,
@@ -75,7 +76,7 @@ describe("compareWithBaseline", () => {
     );
     expect(r.missing).toEqual(["logbutler_y_old"]);
     expect(r.extra).toEqual(["logbutler_x_new"]);
-    expect(r.changed).toEqual([{ name: "logbutler_issue_get", fields: ["description"] }]);
+    expect(r.changed).toMatchObject([{ name: "logbutler_issue_get", fields: ["description"] }]);
   });
 
   it("annotations と inputSchema の違いも検出する", () => {
@@ -88,7 +89,7 @@ describe("compareWithBaseline", () => {
       ],
       [tool()],
     );
-    expect(r.changed).toEqual([
+    expect(r.changed).toMatchObject([
       { name: "logbutler_issue_get", fields: ["inputSchema", "annotations"] },
     ]);
   });
@@ -121,5 +122,107 @@ describe("compareWithBaseline", () => {
       },
     );
     expect(r).toEqual({ missing: [], extra: [], changed: [] });
+  });
+});
+
+describe("compareWithBaseline の診断(property 単位の差分)", () => {
+  const withProps = (properties: Record<string, unknown>, required: string[] = []) =>
+    tool({ inputSchema: { type: "object", properties, required } });
+
+  it("description の差は期待値と実際の値を返す", () => {
+    const r = compareWithBaseline(
+      [tool({ description: "actual" })],
+      [tool({ description: "expected" })],
+    );
+    expect(r.changed[0]?.diffs).toEqual([
+      { field: "description", path: "", expected: "expected", actual: "actual" },
+    ]);
+  });
+
+  it("inputSchema の差は property 単位のパスで返す(型の違い・minimum の混入・欠けた property)", () => {
+    const r = compareWithBaseline(
+      [withProps({ count: { type: "integer", minimum: 0 }, extra: { type: "string" } })],
+      [withProps({ count: { type: "number" }, gone: { type: "string" } })],
+    );
+    const diffs = r.changed[0]?.diffs ?? [];
+    expect(diffs).toContainEqual({
+      field: "inputSchema",
+      path: "properties.count.type",
+      expected: "number",
+      actual: "integer",
+    });
+    expect(diffs).toContainEqual({
+      field: "inputSchema",
+      path: "properties.count.minimum",
+      expected: undefined,
+      actual: 0,
+    });
+    expect(diffs).toContainEqual({
+      field: "inputSchema",
+      path: "properties.gone",
+      expected: { type: "string" },
+      actual: undefined,
+    });
+    expect(diffs).toContainEqual({
+      field: "inputSchema",
+      path: "properties.extra",
+      expected: undefined,
+      actual: { type: "string" },
+    });
+  });
+
+  it("annotations の差も key 単位で返す", () => {
+    const r = compareWithBaseline(
+      [tool({ annotations: { title: "課題詳細取得", readOnlyHint: false } })],
+      [tool()],
+    );
+    expect(r.changed[0]?.diffs).toEqual([
+      { field: "annotations", path: "readOnlyHint", expected: true, actual: false },
+    ]);
+  });
+
+  it("許容した差分は diffs にも出ない", () => {
+    const r = compareWithBaseline([tool({ description: "changed" })], [tool()], {
+      allowedChanges: [{ tool: "logbutler_issue_get", fields: ["description"], reason: "x" }],
+    });
+    expect(r.changed).toEqual([]);
+  });
+
+  it("required と enum は順序を無視して比べる(Go 版は辞書順、zod は定義順のため)", () => {
+    const a = tool({
+      inputSchema: {
+        type: "object",
+        properties: { k: { type: "string", enum: ["b", "a"] } },
+        required: ["issue_key", "attachment_id"],
+      },
+    });
+    const b = tool({
+      inputSchema: {
+        type: "object",
+        properties: { k: { type: "string", enum: ["a", "b"] } },
+        required: ["attachment_id", "issue_key"],
+      },
+    });
+    expect(compareWithBaseline([a], [b])).toEqual({ missing: [], extra: [], changed: [] });
+  });
+
+  it("required の中身が違えば検出する(順序無視でも集合は比べる)", () => {
+    const a = tool({ inputSchema: { type: "object", properties: {}, required: ["a"] } });
+    const b = tool({ inputSchema: { type: "object", properties: {}, required: ["a", "b"] } });
+    const r = compareWithBaseline([a], [b]);
+    expect(r.changed[0]?.diffs?.[0]).toMatchObject({ field: "inputSchema", path: "required" });
+  });
+
+  it("formatCompareResult は差分を人が読める文字列にする", () => {
+    const r = compareWithBaseline(
+      [withProps({ count: { type: "integer" } })],
+      [withProps({ count: { type: "number" } })],
+    );
+    const text = formatCompareResult(r);
+    expect(text).toContain("logbutler_issue_get");
+    expect(text).toContain("inputSchema.properties.count.type");
+    expect(text).toContain('expected "number"');
+    expect(text).toContain('actual "integer"');
+    expect(formatCompareResult({ missing: [], extra: [], changed: [] })).toBe("");
   });
 });

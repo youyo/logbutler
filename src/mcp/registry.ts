@@ -5,7 +5,7 @@
 import type { McpServer, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import { type BacklogClient, BacklogUnauthorizedError } from "../backlog/client";
-import { ArgumentError, ConfigError, toErrorEnvelope } from "../errors";
+import { ArgumentError, ConfigError, LogbutlerError, toErrorEnvelope } from "../errors";
 
 /** logvalet の 4 区分(`internal/mcp/tool_categories.go`)。 */
 export type ToolCategory = "ReadOnly" | "WriteIdempotent" | "WriteNonIdempotent" | "Destructive";
@@ -71,9 +71,16 @@ export function annotationsFor(category: ToolCategory, title: string): ToolAnnot
   }
 }
 
+/** 「今日」の基準タイムゾーンの既定値。Workers は UTC で動くため、利用者の暮らす時刻に合わせる。 */
+export const DEFAULT_TIMEZONE = "Asia/Tokyo";
+
 export interface ToolContext {
   /** このツール呼び出し専用の Backlog クライアント(直列化・呼び出し回数上限はこの単位)。 */
   client: BacklogClient;
+  /** 現在時刻(テストで差し替える)。ツールは `Date.now()` を直接呼ばない。 */
+  now: () => Date;
+  /** 「今日」「今週」の基準になる IANA タイムゾーン(`LOGBUTLER_TIMEZONE`。既定 Asia/Tokyo)。 */
+  timezone: string;
 }
 
 export interface ToolDefinitionInput<S extends z.ZodObject> {
@@ -174,6 +181,10 @@ export interface RegisterDeps {
   getClient: () => BacklogClient;
   /** Backlog が 401 を返したとき(MCP の応答も HTTP 401 にするための合図)。 */
   onBacklogUnauthorized: () => void;
+  /** 現在時刻。省略時は `new Date()`。 */
+  now?: () => Date;
+  /** 「今日」の基準タイムゾーン。省略時は DEFAULT_TIMEZONE。 */
+  timezone?: string;
 }
 
 function textResult(text: string, isError = false) {
@@ -198,6 +209,20 @@ function advertiseOnly(schema: z.ZodObject): StandardSchemaWithJSON {
   } as unknown as StandardSchemaWithJSON;
 }
 
+/**
+ * 想定外の例外(generic_error にするもの)を調べられるよう、例外名と message をログに残す。
+ * 応答には出さない。message にはトークンが混ざりうるので、クライアントが知るトークンと Bearer を伏せる。
+ */
+function logUnexpected(toolName: string, e: unknown, client: BacklogClient | undefined): void {
+  const name = e instanceof Error ? e.name : typeof e;
+  const raw = e instanceof Error ? e.message : String(e);
+  const redacted = (client ? client.redact(raw) : raw).replace(
+    /Bearer\s+[A-Za-z0-9._~+/=-]+/g,
+    "Bearer [REDACTED]",
+  );
+  console.error(`tool ${toolName} failed unexpectedly: ${name}: ${redacted}`);
+}
+
 export function registerTools(
   server: McpServer,
   tools: readonly ToolDefinition[],
@@ -220,13 +245,20 @@ export function registerTools(
         annotations: tool.annotations,
       },
       async (args: unknown) => {
+        let client: BacklogClient | undefined;
         try {
           const parsed = tool.inputSchema.safeParse(args ?? {});
           if (!parsed.success) throw new ArgumentError(describeIssues(parsed.error));
-          const result = await tool.handler(parsed.data, { client: deps.getClient() });
+          client = deps.getClient();
+          const result = await tool.handler(parsed.data, {
+            client,
+            now: deps.now ?? (() => new Date()),
+            timezone: deps.timezone || DEFAULT_TIMEZONE,
+          });
           return textResult(JSON.stringify(result ?? null));
         } catch (e) {
           if (e instanceof BacklogUnauthorizedError) deps.onBacklogUnauthorized();
+          if (!(e instanceof LogbutlerError)) logUnexpected(tool.name, e, client);
           return textResult(JSON.stringify(toErrorEnvelope(e)), true);
         }
       },

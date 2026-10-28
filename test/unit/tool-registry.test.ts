@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { BacklogApiError, BacklogUnauthorizedError } from "../../src/backlog/client";
 import { ArgumentError } from "../../src/errors";
@@ -12,6 +12,7 @@ import {
   TOOLSETS,
   type ToolConfig,
 } from "../../src/mcp/registry";
+import { createMcpServer } from "../../src/mcp/server";
 import { fakeClient, rpcTo } from "../helpers/mcp";
 import { firstText } from "../helpers/oauth-flow";
 
@@ -365,6 +366,77 @@ describe("registerTools", () => {
     expect(body.error.code).toBe("generic_error");
     expect(body.error.message).not.toContain("secret");
     expect(body.error.retryable).toBe(false);
+  });
+
+  describe("想定外の例外のログ", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    const throwing = (thrown: unknown) =>
+      defineTool({
+        name: "logbutler_issue_get",
+        title: "課題詳細取得",
+        description: "d",
+        category: "ReadOnly",
+        toolset: "issue",
+        inputSchema: z.object({}),
+        handler: async () => {
+          throw thrown;
+        },
+      });
+
+    it("generic_error にするとき、例外名とトークンを伏せた message を console.error に残す(応答には出さない)", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const client = fakeClient({ redact: (t) => t.split("at-secret").join("[REDACTED]") });
+      const res = await rpcTo(
+        () =>
+          createMcpServer({
+            tools: [throwing(new TypeError("bad at-secret value"))],
+            getClient: () => client,
+            onBacklogUnauthorized: () => {},
+          }),
+        "tools/call",
+        { name: "logbutler_issue_get", arguments: {} },
+      );
+      expect(JSON.parse(firstText(res)).error.code).toBe("generic_error");
+      expect(spy).toHaveBeenCalledTimes(1);
+      const logged = spy.mock.calls.flat().join(" ");
+      expect(logged).toContain("TypeError");
+      expect(logged).toContain("logbutler_issue_get");
+      expect(logged).toContain("bad [REDACTED] value");
+      expect(logged).not.toContain("at-secret");
+      expect(firstText(res)).not.toContain("bad");
+    });
+
+    it("Error でない値が投げられても落ちずに記録する", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const res = await rpcTo(
+        () =>
+          createMcpServer({
+            tools: [throwing("plain string at-secret")],
+            getClient: () => fakeClient(),
+            onBacklogUnauthorized: () => {},
+          }),
+        "tools/call",
+        { name: "logbutler_issue_get", arguments: {} },
+      );
+      expect(JSON.parse(firstText(res)).error.code).toBe("generic_error");
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("想定内のエラー(Backlog のエラーや引数エラー)は記録しない", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await rpcTo(
+        () =>
+          createMcpServer({
+            tools: [throwing(new BacklogApiError(404))],
+            getClient: () => fakeClient(),
+            onBacklogUnauthorized: () => {},
+          }),
+        "tools/call",
+        { name: "logbutler_issue_get", arguments: {} },
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   it("入力がスキーマに合わないときもエンベロープ(argument_error)の isError で返す", async () => {

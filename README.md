@@ -58,6 +58,7 @@ mise run dev            # wrangler dev
 | `BACKLOG_CLIENT_ID` | secret | Backlog OAuth クライアント ID |
 | `BACKLOG_CLIENT_SECRET` | secret | Backlog OAuth クライアントシークレット |
 | `LOGBUTLER_TOOLSETS` | var(任意) | 有効にするツールのグループ(カンマ区切り、既定 `all`)。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` |
+| `LOGBUTLER_TIMEZONE` | var(任意) | 「今日」「今週」の基準になる IANA タイムゾーン(既定 `Asia/Tokyo`)。`issue_list` の `due_date: today` などが使う。Workers は UTC で動くため、利用者の地域に合わせる |
 | `LOGBUTLER_READ_ONLY` | var(任意) | `true` で書き込み・破壊的ツールを登録しない(既定 `false`) |
 
 ローカルでは `.dev.vars.example` をコピーして `.dev.vars` を作る(コミットしない)。

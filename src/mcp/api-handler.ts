@@ -42,6 +42,7 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
                 accessToken: props.backlogAccessToken,
               }),
             toolConfig,
+            timezone: env.LOGBUTLER_TIMEZONE,
             onBacklogUnauthorized: () => {
               backlogUnauthorized = true;
             },

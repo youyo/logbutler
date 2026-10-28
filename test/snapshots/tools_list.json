@@ -1,5 +1,657 @@
 [
   {
+    "name": "logbutler_activity_list",
+    "description": "List activities by scope (space, project, or user)",
+    "inputSchema": {
+      "properties": {
+        "activity_type_ids": {
+          "description": "Comma-separated activity type IDs to filter",
+          "type": "string"
+        },
+        "count": {
+          "description": "Max number of activities (default 20, max 100)",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order: asc or desc (default: desc)",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User ID or 'me' for current user",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "アクティビティ一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_document_get",
+    "description": "Get document by document ID",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ドキュメント取得"
+    }
+  },
+  {
+    "name": "logbutler_document_list",
+    "description": "List documents in a project",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of documents",
+          "type": "number"
+        },
+        "offset": {
+          "description": "Offset for pagination",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ドキュメント一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_document_tree",
+    "description": "Get the document tree for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ドキュメントツリー取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_attachment_download",
+    "description": "Download an attachment from an issue (max 20MB, returned as base64)",
+    "inputSchema": {
+      "properties": {
+        "attachment_id": {
+          "description": "Attachment ID",
+          "type": "number"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attachment_id",
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "添付ファイルダウンロード"
+    }
+  },
+  {
+    "name": "logbutler_issue_attachment_list",
+    "description": "List attachments for an issue",
+    "inputSchema": {
+      "properties": {
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題添付ファイル一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_comment_list",
+    "description": "List comments for an issue",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of comments",
+          "type": "number"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Offset for pagination",
+          "type": "number"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題コメント一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_get",
+    "description": "Get issue details by issue key",
+    "inputSchema": {
+      "properties": {
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_list",
+    "description": "List issues with optional filters, including parent issue filtering",
+    "inputSchema": {
+      "properties": {
+        "assignee_id": {
+          "description": "Assignee filter: me (resolved via GetMyself) or numeric user ID",
+          "type": "string"
+        },
+        "count": {
+          "description": "Max number of issues (default 20, max 100)",
+          "type": "number"
+        },
+        "due_date": {
+          "description": "Due date filter: overdue, this-week, today, this-month, YYYY-MM-DD, or YYYY-MM-DD:YYYY-MM-DD",
+          "type": "string"
+        },
+        "keyword": {
+          "description": "Keyword search against Backlog issues",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Offset for pagination",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order (asc/desc)",
+          "type": "string"
+        },
+        "parent_issue_ids": {
+          "description": "Comma-separated parent issue IDs to filter child issues (e.g. \"100,200\")",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Filter by single project key (legacy; use project_keys for multiple)",
+          "type": "string"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys (e.g. PROJ1,PROJ2)",
+          "type": "string"
+        },
+        "sort": {
+          "description": "Sort field (e.g. updated, created)",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "Start date filter: today, this-week, this-month, YYYY-MM-DD, or YYYY-MM-DD:YYYY-MM-DD",
+          "type": "string"
+        },
+        "status_id": {
+          "description": "Status filter: not-closed (IDs 1,2,3) or comma-separated numeric IDs",
+          "type": "string"
+        },
+        "updated_since": {
+          "description": "Updated since (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "updated_until": {
+          "description": "Updated until (YYYY-MM-DD)",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_related_list",
+    "description": "List related issues for an issue",
+    "inputSchema": {
+      "properties": {
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "関連課題一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_meta_categories",
+    "description": "List categories for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "カテゴリ一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_meta_custom_field",
+    "description": "List custom field definitions for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "カスタムフィールド一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_meta_issue_types",
+    "description": "List issue types for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題種別一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_meta_statuses",
+    "description": "List statuses for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ステータス一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_meta_version",
+    "description": "List versions for a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "バージョン一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_project_get",
+    "description": "Get project details by project key",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJECT)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクト詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_project_list",
+    "description": "List all projects in the space",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクト一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_shared_file_download",
+    "description": "Download a shared file (max 20MB, returned as base64)",
+    "inputSchema": {
+      "properties": {
+        "file_id": {
+          "description": "Shared file ID",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_id",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "共有ファイルダウンロード"
+    }
+  },
+  {
+    "name": "logbutler_shared_file_list",
+    "description": "List shared files in a project",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of files",
+          "type": "number"
+        },
+        "offset": {
+          "description": "Offset for pagination",
+          "type": "number"
+        },
+        "path": {
+          "description": "Directory path within the project (default: root)",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "共有ファイル一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_space_disk_usage",
+    "description": "Get disk usage information for the Backlog space",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "スペースディスク使用量取得"
+    }
+  },
+  {
+    "name": "logbutler_space_info",
+    "description": "Get information about the Backlog space",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "スペース情報取得"
+    }
+  },
+  {
+    "name": "logbutler_team_get",
+    "description": "Get team details by team ID",
+    "inputSchema": {
+      "properties": {
+        "team_id": {
+          "description": "Team ID (numeric)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "team_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "チーム詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_team_list",
+    "description": "List all teams in the space",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of teams (max 100)",
+          "type": "number"
+        },
+        "no_members": {
+          "description": "If true, exclude member information from response",
+          "type": "boolean"
+        },
+        "offset": {
+          "description": "Offset for pagination",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "チーム一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_team_project",
+    "description": "List teams for a specific project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクトチーム一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_user_get",
+    "description": "Get user details by user ID",
+    "inputSchema": {
+      "properties": {
+        "user_id": {
+          "description": "User ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ユーザー詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_user_list",
+    "description": "List all users in the space",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ユーザー一覧取得"
+    }
+  },
+  {
     "name": "logbutler_user_me",
     "description": "Get the authenticated user's information",
     "inputSchema": {
@@ -12,6 +664,284 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "認証ユーザー情報取得"
+    }
+  },
+  {
+    "name": "logbutler_watching_count",
+    "description": "Get the count of watchings for a user.",
+    "inputSchema": {
+      "properties": {
+        "user_id": {
+          "description": "User ID (required)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ウォッチ数取得"
+    }
+  },
+  {
+    "name": "logbutler_watching_get",
+    "description": "Get watching detail by watching ID.",
+    "inputSchema": {
+      "properties": {
+        "watching_id": {
+          "description": "Watching ID (required)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "watching_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ウォッチ詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_watching_list",
+    "description": "List watchings for a user. Returns issues being watched by the specified user.",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Max number of items (default: 20, max: 100)",
+          "type": "number"
+        },
+        "offset": {
+          "description": "Offset for pagination (default: 0)",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order: asc or desc (default: desc)",
+          "type": "string"
+        },
+        "sort": {
+          "description": "Sort key: created, updated, or issueUpdated",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User ID: \"me\" (resolved via GetMyself) or numeric user ID (e.g. \"12345\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ウォッチ一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_attachment_list",
+    "description": "List attachments on a wiki page",
+    "inputSchema": {
+      "properties": {
+        "wiki_id": {
+          "description": "Wiki page ID",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wiki_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki 添付ファイル一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_count",
+    "description": "Count wiki pages in a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki ページ件数取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_get",
+    "description": "Get a wiki page by ID",
+    "inputSchema": {
+      "properties": {
+        "wiki_id": {
+          "description": "Wiki page ID",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wiki_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki ページ取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_history",
+    "description": "Get wiki page history",
+    "inputSchema": {
+      "properties": {
+        "count": {
+          "description": "Number of records (1-100, default 20)",
+          "type": "number"
+        },
+        "max_id": {
+          "description": "Maximum history ID",
+          "type": "number"
+        },
+        "min_id": {
+          "description": "Minimum history ID",
+          "type": "number"
+        },
+        "order": {
+          "description": "Sort order: asc or desc (default desc)",
+          "type": "string"
+        },
+        "wiki_id": {
+          "description": "Wiki page ID",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wiki_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki 履歴取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_list",
+    "description": "List wiki pages in a project",
+    "inputSchema": {
+      "properties": {
+        "keyword": {
+          "description": "Keyword to search in wiki pages",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki ページ一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_sharedfile_list",
+    "description": "List shared files on a wiki page",
+    "inputSchema": {
+      "properties": {
+        "wiki_id": {
+          "description": "Wiki page ID",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wiki_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki 共有ファイル一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_stars",
+    "description": "List stars on a wiki page",
+    "inputSchema": {
+      "properties": {
+        "wiki_id": {
+          "description": "Wiki page ID",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wiki_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki スター一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_wiki_tags",
+    "description": "List wiki tags in a project",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Wiki タグ一覧取得"
     }
   }
 ]

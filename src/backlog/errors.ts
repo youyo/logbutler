@@ -74,3 +74,14 @@ export class BacklogCallLimitError extends LogbutlerError {
     );
   }
 }
+
+/** ダウンロードが上限を超えた。上限 + 1 バイトまで読んで判定する(全体をメモリに読まない)。 */
+export class DownloadTooLargeError extends LogbutlerError {
+  constructor(readonly maxBytes: number) {
+    super(
+      "api_error",
+      `File is too large to download (limit ${Math.floor(maxBytes / (1024 * 1024))} MiB). Download it from Backlog directly.`,
+      false,
+    );
+  }
+}

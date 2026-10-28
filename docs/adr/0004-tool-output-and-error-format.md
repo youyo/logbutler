@@ -49,3 +49,31 @@ logvalet の MCP ツールは JSON を text content で返し、エラーはプ�
 ### 設定
 
 - `LOGBUTLER_TOOLSETS`(カンマ区切り、既定 `all`)で有効にする toolset を選ぶ。`LOGBUTLER_READ_ONLY=true` で書き込み・破壊的ツールを登録しない。未知の toolset 名・読めない真偽値は設定ミスとして、`/mcp` が 500 を返す(詳細はログのみ)。typo で黙って全ツールが消える、読み取り専用のつもりで書き込めてしまう、を避けるため。
+
+### M03 での追記
+
+#### baseline 比較での配列の順序
+
+- `required` と `enum`(文字列の配列)は**順序を無視**して比べる。Go 版は辞書順、zod は定義順に出すため、集合としては同じでも順序で食い違う。
+  `test/helpers/baseline.ts` の `normalizeTools` が辞書順にそろえる。それ以外の配列(`items` など)は順序まで比べる。
+- 比較結果は property 単位の差分(`changed[].diffs`: `field` / `path` / `expected` / `actual`)を持つ。失敗時は `formatCompareResult` で
+  `tool: inputSchema.properties.count.type: expected "number", actual "integer"` の形に読める。
+
+#### `truncated`
+
+- Backlog の生データをそのまま返すツール(M03 の 38 ツール)は、1 リクエスト分の配列をそのまま返す。`truncated` を足さない
+  (出力を Backlog の形から変えないため)。
+- ページングで複数ページを集めるツール(M05 の加工系。出力は snake_case のオブジェクト)は、`paging.ts` の `truncated` を
+  **常に**出力の最上位に載せる(`"truncated": true | false`)。`true` は「ページ数の上限または件数の上限で止めた。続きがある可能性がある」。
+  値が `false` のときも省略しない(AI が「全部取れた」と「上限で切れた」を取り違えないため)。
+
+#### ダウンロード系の上限
+
+- `issue_attachment_download` / `shared_file_download` の上限は 20 MiB。上限 + 1 バイトまで読んで判定し、超えたら読み取りをやめる。
+  超過は `api_error`(retryable でない)で、message は `File is too large to download (limit 20 MiB). Download it from Backlog directly.`。
+  入力が悪いわけではないので `argument_error` にはしない。
+
+#### 時刻
+
+- 「今日」「今週」は `LOGBUTLER_TIMEZONE`(IANA 名。既定 `Asia/Tokyo`)の暦日で解決する。ツールは `ctx.now()` / `ctx.timezone` を使い、
+  `Date.now()` を直接呼ばない(テストで差し替えるため)。不正なタイムゾーン名は運用者の設定ミスなので `generic_error` にして、詳細はログにだけ出す。

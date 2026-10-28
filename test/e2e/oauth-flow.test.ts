@@ -193,9 +193,9 @@ describe("E2E 3: 取得したトークンで /mcp が使える", () => {
     const list = await mcpRequest(access_token, "tools/list");
     expect(list.status).toBe(200);
     const listBody = await readRpc(list);
-    expect((listBody.result?.tools ?? []).map((t: { name: string }) => t.name)).toEqual([
-      "logbutler_user_me",
-    ]);
+    const names = (listBody.result?.tools ?? []).map((t: { name: string }) => t.name);
+    expect(names).toContain("logbutler_user_me");
+    expect(names).toHaveLength(38); // M03: 読み取りツール(単純系)
 
     const call = await mcpRequest(access_token, "tools/call", {
       name: "logbutler_user_me",

@@ -20,6 +20,8 @@ export interface Env {
   LOGBUTLER_TOOLSETS?: string;
   /** `true` で書き込み・破壊的ツールを登録しない。既定 `false`。 */
   LOGBUTLER_READ_ONLY?: string;
+  /** 「今日」「今週」の基準になる IANA タイムゾーン(例 Asia/Tokyo)。既定 `Asia/Tokyo`。Workers は UTC で動くため。 */
+  LOGBUTLER_TIMEZONE?: string;
   /** OAuthProvider が defaultHandler に渡すヘルパー。 */
   OAUTH_PROVIDER: OAuthHelpers;
 }

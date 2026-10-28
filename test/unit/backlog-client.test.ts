@@ -8,6 +8,7 @@ import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RETRY_WAIT_SECONDS,
   DEFAULT_TIMEOUT_MS,
+  DownloadTooLargeError,
 } from "../../src/backlog/client";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 
@@ -431,5 +432,161 @@ describe("request: タイムアウト", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/** ヘッダーだけ返し、本文は永遠に来ない応答。cancel されたかを記録する。 */
+function hangingBody(init: ResponseInit, chunks: Uint8Array[] = []) {
+  const state = { cancelled: false };
+  let i = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const c = chunks[i++];
+      if (c) controller.enqueue(c);
+      else return new Promise<void>(() => {}); // 以降は止まる
+    },
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return { response: new Response(body, init), state };
+}
+
+describe("request: 本文の読み取りも同じ期限で守る", () => {
+  it("ヘッダー後に本文が止まったら、タイムアウトで打ち切り status 0 の api_error にする(ストリームは cancel される)", async () => {
+    const { response, state } = hangingBody({ status: 200 }, [new TextEncoder().encode("[")]);
+    mockOutboundFetch({ [ISSUES]: () => response });
+    const e = (await caught(make({ timeoutMs: 30 }).request("GET", "/issues"))) as BacklogApiError;
+    expect(e).toBeInstanceOf(BacklogApiError);
+    expect(e.status).toBe(0);
+    expect(e.retryable).toBe(true);
+    expect(e.message).toContain("timed out");
+    expect(state.cancelled).toBe(true);
+  });
+
+  it("エラー応答の本文が止まっても、期限後に HTTP ステータスのエラーとして返す", async () => {
+    const { response } = hangingBody({ status: 500 });
+    mockOutboundFetch({ [ISSUES]: () => response });
+    const e = (await caught(make({ timeoutMs: 30 }).request("GET", "/issues"))) as BacklogApiError;
+    expect(e).toBeInstanceOf(BacklogApiError);
+    expect(e.status).toBe(500);
+  });
+
+  it("本文を読み終えたあとはタイマーが残らない(次のリクエストは別の期限で動く)", async () => {
+    mockOutboundFetch({ [ISSUES]: () => jsonResponse([{ id: 1 }]) });
+    const client = make({ timeoutMs: 30 });
+    expect(await client.request("GET", "/issues")).toEqual([{ id: 1 }]);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(await client.request("GET", "/issues")).toEqual([{ id: 1 }]);
+  });
+});
+
+const FILE = "GET https://example.backlog.com/api/v2/issues/PROJ-1/attachments/7";
+
+describe("download", () => {
+  it("バイト列・ファイル名(Content-Disposition)・Content-Type を返す", async () => {
+    const m = mockOutboundFetch({
+      [FILE]: () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: {
+            "Content-Type": "image/png",
+            "Content-Disposition": 'attachment; filename="a b.png"',
+          },
+        }),
+    });
+    const f = await make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 });
+    expect([...f.data]).toEqual([1, 2, 3]);
+    expect(f.filename).toBe("a b.png");
+    expect(f.contentType).toBe("image/png");
+    expect(m.calls[0]?.headers.get("authorization")).toBe("Bearer at-1");
+  });
+
+  it("filename*=UTF-8'' (RFC 5987) を復号する。なければパスの末尾をファイル名にする", async () => {
+    mockOutboundFetch({
+      [FILE]: () =>
+        new Response("x", {
+          headers: {
+            "Content-Disposition": "attachment; filename*=UTF-8''%E3%83%86%E3%82%B9%E3%83%88.txt",
+          },
+        }),
+    });
+    expect((await make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 })).filename).toBe(
+      "テスト.txt",
+    );
+    vi.restoreAllMocks();
+    mockOutboundFetch({ [FILE]: () => new Response("x") });
+    expect((await make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 })).filename).toBe(
+      "7",
+    );
+  });
+
+  it("上限ちょうどは成功し、上限 + 1 バイトで DownloadTooLargeError(api_error・retryable でない)", async () => {
+    mockOutboundFetch({ [FILE]: () => new Response(new Uint8Array(10)) });
+    expect(
+      (await make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 })).data,
+    ).toHaveLength(10);
+    vi.restoreAllMocks();
+    mockOutboundFetch({ [FILE]: () => new Response(new Uint8Array(11)) });
+    const e = (await caught(
+      make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 }),
+    )) as DownloadTooLargeError;
+    expect(e).toBeInstanceOf(DownloadTooLargeError);
+    expect(e.code).toBe("api_error");
+    expect(e.retryable).toBe(false);
+  });
+
+  it("上限を超えた時点で読むのをやめる(全体をメモリに読まない)", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new Uint8Array(4));
+        if (pulls >= 1000) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    mockOutboundFetch({ [FILE]: () => new Response(body) });
+    await caught(make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 }));
+    expect(pulls).toBeLessThan(10);
+    expect(cancelled).toBe(true);
+  });
+
+  it("Content-Length が上限を超えていれば本文を読まずに断る", async () => {
+    const { response, state } = hangingBody({ status: 200, headers: { "Content-Length": "100" } });
+    mockOutboundFetch({ [FILE]: () => response });
+    const e = await caught(
+      make({ timeoutMs: 1000 }).download("/issues/PROJ-1/attachments/7", { maxBytes: 10 }),
+    );
+    expect(e).toBeInstanceOf(DownloadTooLargeError);
+    expect(state.cancelled).toBe(true);
+  });
+
+  it("本文の途中で止まったらタイムアウト(status 0)", async () => {
+    const { response } = hangingBody({ status: 200 }, [new Uint8Array(2)]);
+    mockOutboundFetch({ [FILE]: () => response });
+    const e = (await caught(
+      make({ timeoutMs: 30 }).download("/issues/PROJ-1/attachments/7", { maxBytes: 10 }),
+    )) as BacklogApiError;
+    expect(e.status).toBe(0);
+    expect(e.message).toContain("timed out");
+  });
+
+  it("404 は Backlog のエラー(not_found)になる", async () => {
+    mockOutboundFetch({
+      [FILE]: () => jsonResponse({ errors: [{ message: "No file.", code: 6 }] }, 404),
+    });
+    const e = (await caught(
+      make().download("/issues/PROJ-1/attachments/7", { maxBytes: 10 }),
+    )) as BacklogApiError;
+    expect(e.code).toBe("not_found");
+  });
+});
+
+describe("redact", () => {
+  it("文字列に混ざったアクセストークンを伏せる", () => {
+    expect(make().redact("boom at-1 and at-1")).toBe("boom [REDACTED] and [REDACTED]");
   });
 });

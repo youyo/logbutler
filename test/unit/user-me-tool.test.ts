@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { BacklogApiError, BacklogUnauthorizedError } from "../../src/backlog/client";
 import { createMcpServer } from "../../src/mcp/server";
-import { USER_ME_TOOL } from "../../src/mcp/tools/user-me";
+import { USER_ME_TOOL, userMe } from "../../src/mcp/tools/user-me";
 import { fakeClient, rpcTo } from "../helpers/mcp";
 import { firstText } from "../helpers/oauth-flow";
 
 type Deps = Parameters<typeof createMcpServer>[0];
 
 const rpc = (deps: Deps, method: string, params: Record<string, unknown> = {}) =>
-  rpcTo(() => createMcpServer(deps), method, params);
+  rpcTo(() => createMcpServer({ ...deps, tools: [userMe] }), method, params);
 
 const okDeps: Deps = {
   getClient: () =>

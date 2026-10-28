@@ -90,6 +90,53 @@ describe("MCP API handler (/mcp の下流)", () => {
     expect(res).toContain("logbutler_user_me");
   });
 
+  describe("LOGBUTLER_TIMEZONE(「今日」の基準)", () => {
+    const ISSUES = "GET https://example.backlog.com/api/v2/issues";
+    const callIssueList = (testEnv: object) =>
+      createMcpApiHandler().fetch(
+        new Request("https://logbutler.test/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "logbutler_issue_list", arguments: { due_date: "today" } },
+          }),
+        }),
+        testEnv as typeof env,
+        ctx,
+      );
+
+    // 2026-10-28 15:30 UTC = 東京では 10-29 の 00:30
+    const dueDates = async (testEnv: object) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-10-28T15:30:00Z"));
+        const m = mockOutboundFetch({ [ISSUES]: () => jsonResponse([]) });
+        const res = await callIssueList(testEnv);
+        expect(res.status).toBe(200);
+        return new URL(m.calls[0]?.url ?? "").searchParams.get("dueDateSince");
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("未設定なら Asia/Tokyo", async () => {
+      expect(await dueDates(env)).toBe("2026-10-29");
+    });
+
+    it("設定すればその地域の今日になる", async () => {
+      expect(await dueDates({ ...env, LOGBUTLER_TIMEZONE: "UTC" })).toBe("2026-10-28");
+      expect(await dueDates({ ...env, LOGBUTLER_TIMEZONE: "America/Los_Angeles" })).toBe(
+        "2026-10-28",
+      );
+    });
+  });
+
   it("設定ミス(未知の toolset)は 500 で、詳細は応答に出さない", async () => {
     const res = await listTools({ ...env, LOGBUTLER_TOOLSETS: "isue" });
     expect(res.status).toBe(500);

@@ -84,35 +84,55 @@ describe("verifyAccessJwt", () => {
     expect(m.callsTo(CERTS)).toHaveLength(1);
   });
 
-  it("未知の kid が来たら鍵ローテーションとみなして JWKS を取り直す", async () => {
-    const rotated = await createTestKey("kid-2");
-    let current = [key];
-    const m = mockOutboundFetch({ [CERTS]: () => jwksResponse(...current) });
-    await verifyAccessJwt(await signAccessJwt(key), cfg);
-    current = [key, rotated];
-    await verifyAccessJwt(await signAccessJwt(rotated), cfg);
-    expect(m.callsTo(CERTS)).toHaveLength(2);
+  it("未知の kid が来たら鍵ローテーションとみなして JWKS を取り直す(取得から 60 秒以上たっていれば)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const rotated = await createTestKey("kid-2");
+      let current = [key];
+      const m = mockOutboundFetch({ [CERTS]: () => jwksResponse(...current) });
+      await verifyAccessJwt(await signAccessJwt(key), cfg);
+      vi.setSystemTime(Date.now() + 61_000);
+      current = [key, rotated];
+      await verifyAccessJwt(await signAccessJwt(rotated), cfg);
+      expect(m.callsTo(CERTS)).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("未知の kid による強制再取得は 60 秒に 1 回まで(不正な JWT の連投で JWKS への通信を増やさない)", async () => {
+  it("キャッシュ取得から 60 秒未満なら、未知の kid でも強制再取得しない(取得直後の再取得を省く)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const unknown = await createTestKey("kid-unknown");
+      const m = mockOutboundFetch({ [CERTS]: () => jwksResponse(key) });
+      await verifyAccessJwt(await signAccessJwt(key), cfg); // 取得 1 回
+      vi.setSystemTime(Date.now() + 59_000);
+      await expectRejected(await signAccessJwt(unknown), "invalid");
+      expect(m.callsTo(CERTS)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("初回取得の直後に未知の kid が来ても、すぐには取り直さない(取得が 1 回で済む)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const unknown = await createTestKey("kid-unknown");
       let current = [key];
       const m = mockOutboundFetch({ [CERTS]: () => jwksResponse(...current) });
       const token = await signAccessJwt(unknown);
-      await expectRejected(token, "invalid"); // 初回取得 + 強制再取得 = 2 回
-      expect(m.callsTo(CERTS)).toHaveLength(2);
+      await expectRejected(token, "invalid"); // 初回取得のみ
+      expect(m.callsTo(CERTS)).toHaveLength(1);
       await expectRejected(token, "invalid"); // 60 秒以内: 再取得しない
       await expectRejected(token, "invalid");
-      expect(m.callsTo(CERTS)).toHaveLength(2);
+      expect(m.callsTo(CERTS)).toHaveLength(1);
 
       // 60 秒たてば、鍵ローテーションに追従するため再び取り直せる
       vi.setSystemTime(Date.now() + 61_000);
       current = [key, unknown];
       const identity = await verifyAccessJwt(token, cfg);
       expect(identity.email).toBe("alice@example.com");
-      expect(m.callsTo(CERTS).length).toBeGreaterThan(2);
+      expect(m.callsTo(CERTS)).toHaveLength(2);
     } finally {
       vi.useRealTimers();
     }

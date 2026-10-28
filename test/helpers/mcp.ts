@@ -53,7 +53,9 @@ export function fakeClient(overrides: Partial<BacklogClient> = {}): BacklogClien
   };
   return {
     request: unexpected("request") as BacklogClient["request"],
+    download: unexpected("download") as BacklogClient["download"],
     getMyself: unexpected("getMyself") as () => Promise<BacklogUser>,
+    redact: (text) => text,
     ...overrides,
   };
 }

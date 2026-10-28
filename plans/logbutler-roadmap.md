@@ -19,6 +19,9 @@ Cloudflare MCP Server Portals 経由で使うことを前提にする。logvalet
 | ランタイムとタスク | mise（node と pnpm を固定）。`mise run test / test:unit / test:e2e / lint / fmt / build / dev` | グローバル規約 |
 | テスト | vitest + `@cloudflare/vitest-pool-workers`。Backlog API はモックのみ | logvalet の方針を引き継ぐ |
 | 出力 | JSON。Backlog の生データを返すツールは Backlog の camelCase のまま、加工した出力（分析・digest・context 等）は snake_case（logvalet と同じ混在） | logvalet と互換にする。全 snake_case 統一は logvalet と非互換になるため却下（2026-10-28 ユーザー決定） |
+| 分析系の取得件数 | ページングで全件取得（上限つき、超過は warning と `truncated`） | logvalet は Backlog 既定の 20 件だけで分析していた。互換維持は却下（2026-10-28 ユーザー決定） |
+| 日付の until | 全ツールで当日を含める（`LOGBUTLER_TIMEZONE` の 23:59:59 まで） | logvalet は user_activity だけ当日を含め、他は 00:00 で切っていた（2026-10-28 ユーザー決定） |
+| 完了とみなす状態 | 全分析で {完了, 対応済み, Closed, Done, Resolved}。`exclude_status` 指定時はそれを優先 | logvalet はツールにより「完了」のみと 5 種の 2 通りがあった（2026-10-28 ユーザー決定） |
 | ツールのエラー | `isError: true` の text content に spec §9 のエンベロープ `{"schema_version":"1","error":{"code","message","retryable"}}` を JSON で入れる | logvalet MCP はプレーンテキストだったが、AI がリトライ可否を判断できるよう変更（2026-10-28 ユーザー決定）。code は logvalet の列挙値（`argument_error` / `authentication_error` / `permission_error` / `not_found` / `api_error` / `rate_limited` 等）に合わせる |
 
 ## 移植元（logvalet）の調査で分かった注意点

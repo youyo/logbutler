@@ -33,9 +33,10 @@ src/auth/token-exchange.ts    tokenExchangeCallback: MCP トークン更新時�
 src/auth/consent-page.ts      同意画面(クライアント由来の文字列は必ずエスケープ)
 src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変換
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)
-src/mcp/tools/                ツール(M01 は user-me のみ)
-src/backlog/client.ts         Backlog API クライアント
-test/unit/  test/e2e/  test/helpers/  test/fixtures/(logvalet の tools/list baseline)  test/snapshots/(tools/list のスナップショット)
+src/mcp/args.ts              ツール共通の引数処理(zod ビルダー・ID 解決・日付・CSV・パスのエスケープ)
+src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)
+src/backlog/client.ts         Backlog API クライアント(request / download。本文の読み取りも同じ期限)
+test/unit/  test/e2e/  test/helpers/(tool-call.ts: 実クライアント + モック fetch でツールを呼ぶ)  test/fixtures/(logvalet の tools/list baseline。コピー元は README)  test/snapshots/(tools/list のスナップショット)
 ```
 
 ## テストの書き方
