@@ -21,7 +21,7 @@ jobs:
       # mise.toml の node / pnpm を入れる。
       - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.19
+          version: 2026.10.9 # 公開 2026-10-13（2 週間ルール）
       - run: mise run install
       - run: mise run lint
       - run: mise run test
