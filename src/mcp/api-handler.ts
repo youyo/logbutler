@@ -7,6 +7,7 @@ import { MCP_PATH, protectedResourceMetadataUrl } from "../urls";
 import { parseToolConfig } from "./registry";
 import { callMcpHandler } from "./request-body";
 import { createMcpServer } from "./server";
+import { ALL_TOOLS } from "./tools";
 
 /**
  * OAuthProvider の apiHandler。`ctx.props` は grant の props(Backlog のトークン入り)。
@@ -24,7 +25,7 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       // toolsets / read_only は接続 URL のクエリで決まる(ADR 0008)。不正な値は 400 で理由を返す。
       let toolConfig: ReturnType<typeof parseToolConfig>;
       try {
-        toolConfig = parseToolConfig(new URL(request.url).searchParams);
+        toolConfig = parseToolConfig(new URL(request.url).searchParams, ALL_TOOLS);
       } catch (e) {
         if (!(e instanceof QueryError)) throw e;
         return new Response(

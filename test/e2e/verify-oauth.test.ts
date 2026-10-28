@@ -127,7 +127,7 @@ describe("E2E: verify:oauth(実環境確認用 CLI)を Worker とモック Backl
     ]);
     expect(report.ok).toBe(true);
     expect(report.facts.issuer).toBe(ORIGIN);
-    expect(report.facts.toolCount).toBeGreaterThanOrEqual(74);
+    expect(report.facts.toolCount).toBeGreaterThanOrEqual(86);
     expect(report.facts.userId).toBe(42);
     expect(report.facts.tokenExpiresInSeconds).toBeGreaterThan(0);
     expect(report.facts.refreshedExpiresInSeconds).toBeGreaterThan(0);

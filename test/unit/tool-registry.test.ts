@@ -13,6 +13,7 @@ import {
   type ToolConfig,
 } from "../../src/mcp/registry";
 import { createMcpServer } from "../../src/mcp/server";
+import { ALL_TOOLS } from "../../src/mcp/tools";
 import { fakeClient, rpcTo } from "../helpers/mcp";
 import { firstText } from "../helpers/oauth-flow";
 
@@ -167,10 +168,11 @@ describe("toolset と環境変数", () => {
       "digest",
       "search",
       "notification",
+      "project_settings",
     ]);
   });
 
-  const q = (query: string) => parseToolConfig(new URLSearchParams(query));
+  const q = (query: string) => parseToolConfig(new URLSearchParams(query), ALL_TOOLS);
 
   it("既定(クエリなし)は all・書き込みあり", () => {
     expect(q("")).toEqual({ toolsets: "all", readOnly: false });
@@ -198,6 +200,20 @@ describe("toolset と環境変数", () => {
     expect(() => q("read_only=yes")).toThrow(QueryError);
     expect(() => q("read_only=yes")).toThrow(/read_only.*yes/);
     expect(() => q("read_only=false&read_only=true")).toThrow(QueryError);
+  });
+
+  it("公開されるツールが 0 個になる組み合わせは QueryError(tools capability が無く MCP が 404 を返すため)", () => {
+    // project_settings は書き込み・破壊的ツールだけ、star も書き込みだけ
+    expect(() => q("toolsets=project_settings&read_only=true")).toThrow(QueryError);
+    expect(() => q("toolsets=project_settings&read_only=true")).toThrow(
+      /toolsets=project_settings.*read_only=true.*ツールがありません/,
+    );
+    expect(() => q("toolsets=star&read_only=true")).toThrow(QueryError);
+    expect(() => q("toolsets=star,project_settings&read_only=true")).toThrow(QueryError);
+    // 1 つでも読み取りツールが残る組み合わせは通る
+    expect(q("toolsets=star,issue&read_only=true").readOnly).toBe(true);
+    expect(q("toolsets=project_settings").readOnly).toBe(false);
+    expect(q("read_only=true").readOnly).toBe(true);
   });
 
   it("関係のないクエリは無視する(環境変数は読まない)", () => {

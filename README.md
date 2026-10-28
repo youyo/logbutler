@@ -5,7 +5,7 @@ Cloudflare Workers 上で動き、利用者ごとに自分の Backlog アカウ�
 前段に Cloudflare MCP Server Portals を置いても、MCP クライアントから直接つないでもよい(Logbutler は DCR 対応の OAuth 付き MCP サーバーとして振る舞う)。
 
 Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Remote MCP 機能を TypeScript に移植したもので、
-**74 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
+**86 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
 
 > **商標について**: Backlog は株式会社ヌーラボの登録商標です。Logbutler は個人プロジェクトであり、株式会社ヌーラボとは無関係です。
 
@@ -21,7 +21,7 @@ MCP クライアント(Portal など)
    │  /register(DCR) /token /mcp /.well-known/*
    ▼
 ┌───────────────────────── Logbutler(Cloudflare Worker) ─────────────────────────┐
-│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(74 ツール)       │
+│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(86 ツール)       │
 │       │                                              │                           │
 │       │ /authorize /callback /healthz (Hono)          └─▶ Backlog API(利用者のトークン) │
 │       ▼                                                                          │
@@ -48,9 +48,9 @@ MCP クライアント(Portal など)
 - [デプロイと運用の手順書](docs/runbook.md)(Backlog の OAuth アプリ登録、KV・ドメイン・secrets・デプロイ、運用)
 - [実機確認リスト](docs/manual-verification.md)(実デプロイしていないため未検証の前提と、その確認手順・記入欄)
 
-## ツール(74 個)
+## ツール(86 個)
 
-`toolsets` で絞り込める(下の「接続 URL のクエリ」)。書き込み・破壊的ツールは `read_only=true` で非公開にできる。
+`toolsets` で絞り込める(下の「接続 URL のクエリ」)。書き込み・破壊的ツールは `read_only=true` で非公開にできる。`project_settings`(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除。Backlog の管理者権限が必要)も既定で公開され、`read_only=true` で隠れる(ADR 0013)。
 
 | toolset | 件数 | ツール(接頭辞 `logbutler_` を省略) |
 |---|---|---|
@@ -70,6 +70,7 @@ MCP クライアント(Portal など)
 | `digest` | 4 | `space_digest` `document_digest` `activity_digest` `digest_unified` |
 | `search` | 2 | `document_search` `search` |
 | `notification` | 2 | `notification_list` `notification_count` |
+| `project_settings` | 12 | `category_add` `category_update` `category_delete` `version_add` `version_update` `version_delete` `status_add` `status_update` `status_delete` `custom_field_add` `custom_field_update` `custom_field_delete` |
 
 ## 開発
 
@@ -112,12 +113,12 @@ mise run dev            # wrangler dev
 
 | 設定 | 置き場所 | 説明 |
 |---|---|---|
-| `toolsets` | `/mcp` の URL クエリ | 公開するツールのグループ(カンマ区切り、既定 `all`)。例 `/mcp?toolsets=issue,wiki`。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` |
+| `toolsets` | `/mcp` の URL クエリ | 公開するツールのグループ(カンマ区切り、既定 `all`)。例 `/mcp?toolsets=issue,wiki`。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` `project_settings` |
 | `read_only` | `/mcp` の URL クエリ | `true` で書き込み・破壊的ツールを公開しない(既定 `false`)。例 `/mcp?toolsets=issue&read_only=true` |
 | `timezone` | ツール引数 | 「今日」「今週」の基準になる IANA 名(省略時 `Asia/Tokyo`)。`issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` `activity_digest` `user_activity` `digest_unified` にある |
 | `max_response_tokens` | ツール引数 | 応答サイズの安全網(推定トークン数。省略時 50000、`0` で無効)。超えると切り詰めずに `response_too_large`(`retryable: false`)のエラーを返す。読み取りツールにある(ダウンロード系 2 個を除く)。書き込み系は対象外。`issue_list` の count が大きいときや分析ツールで複数プロジェクトを指定したときは上限を超えうる。その場合は絞り込むか `max_response_tokens` を指定する。ADR 0007 |
 
-不正なクエリ値(未知の toolset 名、`read_only` が `true`/`false` 以外)は 400 で、理由を本文に返す。不正な `timezone` は `argument_error`。
+不正なクエリ値(未知の toolset 名、`read_only` が `true`/`false` 以外)は 400 で、理由を本文に返す。公開されるツールが 0 個になる組み合わせ(`toolsets=project_settings&read_only=true`、`toolsets=star&read_only=true` など。書き込みだけの toolset を読み取り専用にした場合)も 400(ツールが 0 個だと MCP サーバーが tools capability を宣言せず、tools/list が 404 になるため)。不正な `timezone` は `argument_error`。
 
 **`read_only` の綴りを間違えると効かない**(未知のクエリは無視されるため)。そこで、まぎらわしい綴り(`readonly` `readOnly` `READ_ONLY` `read-only`、`tool_sets` `Toolsets` など。小文字にして `_` と `-` を除くと `read_only` / `toolsets` に一致するもの)は 400 にして、正しいキー名を案内する。それ以外の未知のクエリは従来どおり無視する。
 詳細と未検証の前提は ADR 0008。

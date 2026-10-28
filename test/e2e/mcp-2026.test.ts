@@ -50,7 +50,7 @@ describe("E2E 12-1: 2026-07-28 レーン(initialize なし)", () => {
     const res = await modernRequest(token, "tools/list");
     expect(res.status).toBe(200);
     const rpc = await readRpc(res);
-    expect(rpc.result?.tools?.length).toBe(74);
+    expect(rpc.result?.tools?.length).toBe(86);
     // 2026 版の応答だけが持つ印(旧版レーンには付かない)
     expect(JSON.stringify(rpc.result)).toContain("io.modelcontextprotocol/serverInfo");
   });
@@ -217,7 +217,7 @@ describe("E2E 12-3: 旧版レーン(initialize あり)も動く", () => {
       const { initRpc, rpc } = await legacyFlow(version);
       expect(initRpc.result?.protocolVersion).toBe(version);
       const list = await rpc(2, "tools/list", {});
-      expect(list.result?.tools?.length).toBe(74);
+      expect(list.result?.tools?.length).toBe(86);
       // 旧版の応答には 2026 版の印が付かない
       expect(JSON.stringify(list.result)).not.toContain("io.modelcontextprotocol/serverInfo");
       const called = await rpc(3, "tools/call", { name: "logbutler_user_me", arguments: {} });

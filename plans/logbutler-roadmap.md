@@ -27,6 +27,7 @@ Cloudflare MCP Server Portals 経由で使うことを前提にする。logvalet
 | フラグの置き場所 | クライアント側で制御する。呼び出し単位の設定（`timezone`、`max_response_tokens`）はツール引数、公開ツールを決める設定（`toolsets`、`read_only`）は MCP の URL クエリ。環境変数のフラグは廃止 | 運用者の環境変数よりクライアント側で制御できる方がよい（2026-10-28 ユーザー決定）。M05.5 で移行 |
 | デプロイ設定（2026-10-29 改訂） | このリポジトリは OSS の upstream。下流が upstream を pull し続けながらデプロイ CI を動かす。`wrangler.jsonc` は共有設定（トップレベルのダミー値のみ、`env` なし）とし、デプロイ時に `LOGBUTLER_*` 環境変数（CI は Variables）から `wrangler.deploy.jsonc`（gitignore）を生成して `wrangler deploy -c` する。secrets は `--secrets-file`（CI）/ `wrangler secret put`。運用者がやるのは Variables / Secrets の登録だけ | ユーザー決定。却下: 下流が wrangler.jsonc を編集する案（pull が競合する）、CLI フラグだけの案（KV id を渡せない）。ADR 0011。`env.production` / `env.staging` は削除 |
 | MCP 仕様 | 2026-07-28（ステートレス、`Mcp-Method` / `Mcp-Name`、認可の `iss`）を主、旧版を互換として両方を E2E で固定 | M05.5 で確認 |
+| プロジェクト設定ツール（2026-10-29） | カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除の 12 ツールを toolset `project_settings` として**既定で公開**し、`read_only=true` で隠す | ユーザー決定。M06 の「ツール数を増やさない」を覆した。リスト項目の個別操作は対象外。ADR 0013 |
 | ツールのエラー | `isError: true` の text content に spec §9 のエンベロープ `{"schema_version":"1","error":{"code","message","retryable"}}` を JSON で入れる | logvalet MCP はプレーンテキストだったが、AI がリトライ可否を判断できるよう変更（2026-10-28 ユーザー決定）。code は logvalet の列挙値（`argument_error` / `authentication_error` / `permission_error` / `not_found` / `api_error` / `rate_limited` 等）に合わせる |
 
 ## 移植元（logvalet）の調査で分かった注意点

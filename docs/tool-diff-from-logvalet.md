@@ -56,6 +56,8 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 | `engagement` の失敗 | プレーンテキスト | 規約にない案件は `argument_error`（使える案件名つき）、規約が未導入・カテゴリなし・YAML 不正は `generic_error`（message はそのまま見える） | ADR 0004 |
 | タイムアウト | 接続・応答ヘッダーまで | 応答**本文の読み取りまで**同じ期限(既定 30 秒) | Workers の実時間制限と MCP クライアントの待ち時間 |
 
+- プロジェクト設定ツールの名前(カテゴリー・バージョン・状態)の長さは src で検証しない。上限は Backlog の docs になく変わりうるため応答に任せる(実測値は docs/manual-verification.md、ADR 0013)。
+
 ## M05A: 分析系の加工ツール 11 個
 
 `issue_stale` `project_blockers` `user_workload` `project_health` `issue_context` `issue_triage_materials` `my_tasks`
@@ -188,9 +190,39 @@ toolset: `space_digest` `document_digest` `activity_digest` `digest_unified` は
 | 読み取りツール 55 個(ダウンロード系 2 個を除く)の `inputSchema` | `max_response_tokens` なし | 任意の整数引数 `max_response_tokens`(省略時 50000、0 で無効)を追加。超えたら切り詰めず `response_too_large` | 巨大な応答で AI のコンテキストを溢れさせない最後の安全網。フラグはクライアントが決める(2026-10-28 ユーザー決定)。`ALLOWED_CHANGES` に理由つきで載せ、`tools-list-snapshot.test.ts` が差分を `properties.max_response_tokens` の追加だけに固定している(`timezone` を持つ 9 ツールは両方) |
 | エラーコード | `response_too_large` なし | 追加(retryable: false) | ADR 0004 |
 
+## プロジェクト設定ツール 12 個(ADR 0013。logvalet に無い)
+
+`test/helpers/baseline.ts` の `ALLOWED_EXTRA` に載せている。toolset は `project_settings`。既定の `toolsets=all` で公開し、`read_only=true` で隠す。出力は Backlog の生データ(camelCase)。管理者権限がないと Backlog が 403 を返し、`permission_error` になる。仕様は Backlog API の公式 docs(`https://developer.nulab.com/docs/backlog/api/2/` の add/update/delete-category・-version-milestone・-status・-custom-field)。
+
+| ツール | 区分 | Backlog API | 主な引数(`project_key` は全ツール必須) |
+|---|---|---|---|
+| `category_add` | 非冪等の書き込み | `POST /projects/{key}/categories` | `name` |
+| `category_update` | 冪等の書き込み | `PATCH /projects/{key}/categories/{id}` | `category_id` `name` |
+| `category_delete` | 破壊的 | `DELETE /projects/{key}/categories/{id}` | `category_id` |
+| `version_add` | 非冪等の書き込み | `POST /projects/{key}/versions` | `name` `description` `start_date` `release_due_date` |
+| `version_update` | 冪等の書き込み | `PATCH /projects/{key}/versions/{id}` | `version_id` `name`(必須) `description` `start_date` `release_due_date` `archived` |
+| `version_delete` | 破壊的 | `DELETE /projects/{key}/versions/{id}` | `version_id` |
+| `status_add` | 非冪等の書き込み | `POST /projects/{key}/statuses` | `name` `color`(docs の 10 色のみ) |
+| `status_update` | 冪等の書き込み | `PATCH /projects/{key}/statuses/{id}` | `status_id` `name` `color`(どちらか必須) |
+| `status_delete` | 破壊的 | `DELETE /projects/{key}/statuses/{id}` | `status_id` `substitute_status_id`(必須。削除対象と同じは不可) |
+| `custom_field_add` | 非冪等の書き込み | `POST /projects/{key}/customFields` | `type_id`(1〜8) `name` `description` `required` `applicable_issue_type_ids`(CSV) と型別の引数(下) |
+| `custom_field_update` | 冪等の書き込み | `PATCH /projects/{key}/customFields/{id}` | `custom_field_id` と、1 つ以上の変更項目(型別の引数は 1 つの型の分だけ) |
+| `custom_field_delete` | 破壊的 | `DELETE /projects/{key}/customFields/{id}` | `custom_field_id` |
+
+カスタム属性の型別の引数(Backlog を呼ぶ前に検証し、合わなければ `argument_error`):
+
+| typeId | 受け付ける引数 |
+|---|---|
+| 1 テキスト・2 文章 | なし |
+| 3 数値 | `number_min` `number_max` `initial_value` `unit` |
+| 4 日付 | `date_min` `date_max`(`YYYY-MM-DD`) `initial_value_type`(1 今日 / 2 今日 + `initial_shift` / 3 `initial_date`) `initial_date` `initial_shift` |
+| 5 単一リスト・6 複数リスト・7 チェックボックス・8 ラジオ | `items`(文字列の配列) `allow_input` `allow_add_item` |
+
+対象外: カスタム属性のリスト項目の追加・更新・削除(項目単位のエンドポイント)。`custom_field_add` の初期 `items` までで、`custom_field_update` に `items` はない。docs から読み取れず推測しなかった点は ADR 0013 の「未確定の点」。
+
 ## M07: 全マイルストーンの見直し(ツール数の内訳)
 
-M07 ではツールを足していない。M03〜M06 の差分がこの文書に揃っているかを、ツール数の内訳で突き合わせた。
+M07 ではツールを足していない(プロジェクト設定 12 個は M07 のあと、ADR 0013 で追加)。M03〜M06 の差分がこの文書に揃っているかを、ツール数の内訳で突き合わせた。
 
 | マイルストーン | 追加数 | 累計 | この文書の節 |
 |---|---|---|---|
@@ -199,7 +231,8 @@ M07 ではツールを足していない。M03〜M06 の差分がこの文書に
 | M05A(分析系の加工) | 11 | 64 | M05A |
 | M05B(digest 系 6 + `user_activity`) | 7 | 71 | M05B |
 | M06(公式 MCP 由来) | 3 | 74 | M06 |
+| ADR 0013(プロジェクト設定) | 12 | 86 | プロジェクト設定ツール |
 
-- 74 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
+- 86 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
 - 全ツールの `tools/list`(description / inputSchema / annotations)は `test/snapshots/tools_list.json` に固定し、logvalet の baseline との差は `ALLOWED_CHANGES` / `ALLOWED_EXTRA` に理由つきで載せたものだけ(`test/helpers/baseline.ts`)。
 - 実機での確認が要る差分(`issue_create` の `priorityId`(確認済み・修正済み)、未公開 API `relatedIssues`、4 MiB アップロード)は [manual-verification.md](manual-verification.md) の V08・V09・V11。

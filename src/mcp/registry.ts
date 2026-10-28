@@ -40,6 +40,7 @@ export const TOOLSETS = [
   "digest",
   "search",
   "notification",
+  "project_settings",
 ] as const;
 export type Toolset = (typeof TOOLSETS)[number];
 
@@ -204,9 +205,13 @@ function rejectMisspelledKeys(params: URLSearchParams): void {
  * 公開するツールは tools/list の時点で決まるため、ツール引数ではなく接続 URL で決める(ADR 0008)。
  * 未知の toolset 名や読めない真偽値は QueryError にする(typo で黙って全ツールが消えたり、
  * 読み取り専用のつもりで書き込めたりしないため)。`read_only` / `toolsets` のまぎらわしい綴り違いも QueryError。
- * それ以外の関係のないクエリは無視する。
+ * 公開ツールが 0 個になる組み合わせ(`toolsets=project_settings&read_only=true` など)も QueryError。
+ * それ以外の関係のないクエリは無視する。`tools` は公開候補(通常は ALL_TOOLS)。
  */
-export function parseToolConfig(params: URLSearchParams): ToolConfig {
+export function parseToolConfig(
+  params: URLSearchParams,
+  tools: readonly ToolDefinition[],
+): ToolConfig {
   rejectMisspelledKeys(params);
   const names = params
     .getAll("toolsets")
@@ -233,7 +238,16 @@ export function parseToolConfig(params: URLSearchParams): ToolConfig {
   if (ro !== "" && ro !== "true" && ro !== "false") {
     throw new QueryError(`read_only は true か false: ${readOnlyValues[0]}`);
   }
-  return { toolsets, readOnly: ro === "true" };
+  const config: ToolConfig = { toolsets, readOnly: ro === "true" };
+  // 公開ツールが 0 個だと MCP サーバーが tools capability を宣言せず、tools/list が 404 になる。
+  // 空の一覧を返すのではなく、組み合わせの誤りとして理由つきで弾く。
+  if (selectTools(tools, config).length === 0) {
+    const sets = toolsets === "all" ? "all" : [...toolsets].sort().join(",");
+    throw new QueryError(
+      `toolsets=${sets} と read_only=${config.readOnly} の組み合わせでは公開されるツールがありません`,
+    );
+  }
+  return config;
 }
 
 export function selectTools(

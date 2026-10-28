@@ -228,7 +228,7 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     const rw = (await rpcWith("false", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(rw, n).toContain(n);
     expect(rw).toContain("logbutler_project_conventions");
-    expect(rw).toHaveLength(38 + 14 + 1 + 11 + 7 + 3); // + M05A の分析 11 + M05B の 7 + M06 の 3(すべて ReadOnly)
+    expect(rw).toHaveLength(38 + 14 + 1 + 11 + 7 + 3 + 12); // + M05A の分析 11 + M05B の 7 + M06 の 3(すべて ReadOnly)+ プロジェクト設定 12(書き込み・破壊的。E2E 16 に read_only の検証)
 
     const ro = (await rpcWith("true", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(ro, n).not.toContain(n);

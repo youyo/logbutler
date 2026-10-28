@@ -43,7 +43,7 @@ src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変�
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)
 src/mcp/response-limit.ts    応答サイズの上限(推定トークン数。ADR 0007)
 src/mcp/args.ts              ツール共通の引数処理(zod ビルダー・ID 解決・日付・CSV・パスのエスケープ)
-src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)、公式 MCP 由来の通知系 2 個は `notification.ts`、`project_users` は `project.ts`
+src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)、公式 MCP 由来の通知系 2 個は `notification.ts`、`project_users` は `project.ts`、プロジェクト設定 12 個(カテゴリー・バージョン・状態・カスタム属性の add / update / delete。toolset `project_settings`。既定で公開、`read_only=true` で隠れる。ADR 0013)は `project-settings.ts`
 src/config-check.ts          起動時の設定チェック(ADR 0010)。src/index.ts が OAuthProvider の前に呼ぶ
 scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oauth`)。core.ts(Web 標準 API だけ。入出力は VerifyIo で注入)・args.ts・loopback.ts(node:http)・main.ts(Node 24 の型ストリップで直接実行。TS の enum / parameter property は使わない)
 .github/workflows/ci.yml     lint / test / deploy:check(アクションは SHA 固定)

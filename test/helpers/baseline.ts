@@ -249,11 +249,17 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
 ];
 
 export const ALLOWED_MISSING: readonly string[] = [];
-/** M06: logvalet に無く、Nulab 公式 MCP から取り込んだ 3 ツール(docs/tool-diff-from-logvalet.md)。 */
+/** logvalet に無い追加ツール(docs/tool-diff-from-logvalet.md)。M06: Nulab 公式 MCP から取り込んだ 3 ツール。ADR 0013: プロジェクト設定 12 ツール。 */
 export const ALLOWED_EXTRA: readonly string[] = [
   "logbutler_notification_list",
   "logbutler_notification_count",
   "logbutler_project_users",
+  // ADR 0013: プロジェクト設定ツール 12 個(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除)。
+  // logvalet に無い。M06 で「ツール数を増やさない」として見送った判断を、ユーザーが覆した(2026-10-29)。
+  // 既定の toolsets=all で公開し、read_only=true で隠す。
+  ...["category", "version", "status", "custom_field"].flatMap((r) =>
+    ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
+  ),
 ];
 
 export function compareWithBaseline(

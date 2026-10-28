@@ -36,6 +36,7 @@ M05A までは、ツールの公開範囲(toolset・読み取り専用)と「今
 ### OAuth の resource とクエリ付き URL
 
 - resource 識別子(RFC 9728 / トークンの audience)は `https://<host>/mcp`(クエリなし)のまま。
+- **公開ツールが 0 個になる組み合わせは 400**(`parseToolConfig` が `ALL_TOOLS` で選択結果を数える。例 `toolsets=project_settings&read_only=true`)。ツールが 1 つも登録されないと MCP サーバーが tools capability を宣言せず、2026-07-28 レーンの tools/list が 404 `Method not found` になるため(2026-10-29 実環境で確認)。
 - `OAuthProvider` は `/mcp?toolsets=...` をパス `/mcp` として扱い、Bearer の検証が通る(E2E `client-control.test.ts`)。
 - 401 の `WWW-Authenticate` の `resource_metadata` はクエリを含まない正規 URL を指す。Backlog が 401 のときの `invalid_token` チャレンジも同じ。
 - **未検証の前提**(確認手順は [docs/manual-verification.md](../manual-verification.md) の P3): Cloudflare MCP Server Portal が、登録された URL のクエリ(`?toolsets=...&read_only=true`)をそのまま保持して

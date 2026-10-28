@@ -128,6 +128,307 @@
     }
   },
   {
+    "name": "logbutler_category_add",
+    "description": "Add a category to a project (requires administrator permission)",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Category name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カテゴリー追加"
+    }
+  },
+  {
+    "name": "logbutler_category_delete",
+    "description": "Delete a category of a project (requires administrator permission). This cannot be undone",
+    "inputSchema": {
+      "properties": {
+        "category_id": {
+          "description": "Category ID to delete (see logbutler_meta_categories)",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category_id",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カテゴリー削除"
+    }
+  },
+  {
+    "name": "logbutler_category_update",
+    "description": "Rename a category of a project (requires administrator permission)",
+    "inputSchema": {
+      "properties": {
+        "category_id": {
+          "description": "Category ID (see logbutler_meta_categories)",
+          "type": "number"
+        },
+        "name": {
+          "description": "New category name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category_id",
+        "name",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カテゴリー更新"
+    }
+  },
+  {
+    "name": "logbutler_custom_field_add",
+    "description": "Add a custom field to a project (requires administrator or project administrator permission). type_id: 1 text, 2 sentence, 3 number, 4 date, 5 single list, 6 multiple list, 7 checkbox, 8 radio. Type-specific arguments are accepted only for the matching types: number_min/number_max/initial_value/unit (3), date_min/date_max/initial_value_type/initial_date/initial_shift (4), items/allow_input/allow_add_item (5-8). Managing individual list items afterwards is not supported",
+    "inputSchema": {
+      "properties": {
+        "allow_add_item": {
+          "description": "List types (type_id 5-8) only: true to allow users to add list items",
+          "type": "boolean"
+        },
+        "allow_input": {
+          "description": "List types (type_id 5-8) only: true to allow an \"Other\" free-text input",
+          "type": "boolean"
+        },
+        "applicable_issue_type_ids": {
+          "description": "Comma-separated issue type IDs the field is enabled for (e.g. \"1,2\"). Omit to enable it for all issue types",
+          "type": "string"
+        },
+        "date_max": {
+          "description": "Date type (type_id 4) only: maximum date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "date_min": {
+          "description": "Date type (type_id 4) only: minimum date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description of the field",
+          "type": "string"
+        },
+        "initial_date": {
+          "description": "Date type (type_id 4) only: initial date in YYYY-MM-DD format (with initial_value_type 3)",
+          "type": "string"
+        },
+        "initial_shift": {
+          "description": "Date type (type_id 4) only: days offset from today (with initial_value_type 2)",
+          "type": "number"
+        },
+        "initial_value": {
+          "description": "Number type (type_id 3) only: initial value",
+          "type": "number"
+        },
+        "initial_value_type": {
+          "description": "Date type (type_id 4) only: 1 = today, 2 = today + initial_shift days, 3 = the date in initial_date",
+          "type": "number"
+        },
+        "items": {
+          "description": "List types (type_id 5-8) only: initial list items",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Custom field name",
+          "type": "string"
+        },
+        "number_max": {
+          "description": "Number type (type_id 3) only: maximum value",
+          "type": "number"
+        },
+        "number_min": {
+          "description": "Number type (type_id 3) only: minimum value",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        },
+        "required": {
+          "description": "true to make the field required",
+          "type": "boolean"
+        },
+        "type_id": {
+          "description": "Custom field type: 1 text, 2 sentence, 3 number, 4 date, 5 single list, 6 multiple list, 7 checkbox, 8 radio",
+          "type": "number"
+        },
+        "unit": {
+          "description": "Number type (type_id 3) only: unit label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "project_key",
+        "type_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カスタム属性追加"
+    }
+  },
+  {
+    "name": "logbutler_custom_field_delete",
+    "description": "Delete a custom field of a project (requires administrator or project administrator permission). Its values on issues are lost. This cannot be undone",
+    "inputSchema": {
+      "properties": {
+        "custom_field_id": {
+          "description": "Custom field ID to delete (see logbutler_meta_custom_field)",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "custom_field_id",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カスタム属性削除"
+    }
+  },
+  {
+    "name": "logbutler_custom_field_update",
+    "description": "Update a custom field of a project (requires administrator or project administrator permission). Only the given fields are sent; at least one is required. The field's type cannot be changed, and type-specific arguments must match the field's type (Backlog validates this). Updating list items is not supported",
+    "inputSchema": {
+      "properties": {
+        "allow_add_item": {
+          "description": "List types only: true to allow users to add list items",
+          "type": "boolean"
+        },
+        "allow_input": {
+          "description": "List types only: true to allow an \"Other\" free-text input",
+          "type": "boolean"
+        },
+        "applicable_issue_type_ids": {
+          "description": "Comma-separated issue type IDs the field is enabled for (e.g. \"1,2\"). Omit to enable it for all issue types",
+          "type": "string"
+        },
+        "custom_field_id": {
+          "description": "Custom field ID (see logbutler_meta_custom_field)",
+          "type": "number"
+        },
+        "date_max": {
+          "description": "Date type (type_id 4) only: maximum date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "date_min": {
+          "description": "Date type (type_id 4) only: minimum date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description of the field",
+          "type": "string"
+        },
+        "initial_date": {
+          "description": "Date type (type_id 4) only: initial date in YYYY-MM-DD format (with initial_value_type 3)",
+          "type": "string"
+        },
+        "initial_shift": {
+          "description": "Date type (type_id 4) only: days offset from today (with initial_value_type 2)",
+          "type": "number"
+        },
+        "initial_value": {
+          "description": "Number type (type_id 3) only: initial value",
+          "type": "number"
+        },
+        "initial_value_type": {
+          "description": "Date type (type_id 4) only: 1 = today, 2 = today + initial_shift days, 3 = the date in initial_date",
+          "type": "number"
+        },
+        "name": {
+          "description": "Custom field name",
+          "type": "string"
+        },
+        "number_max": {
+          "description": "Number type (type_id 3) only: maximum value",
+          "type": "number"
+        },
+        "number_min": {
+          "description": "Number type (type_id 3) only: minimum value",
+          "type": "number"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        },
+        "required": {
+          "description": "true to make the field required",
+          "type": "boolean"
+        },
+        "unit": {
+          "description": "Number type (type_id 3) only: unit label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "custom_field_id",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "カスタム属性更新"
+    }
+  },
+  {
     "name": "logbutler_digest_daily",
     "description": "Generate daily periodic digest for a project (completed/started/blocked)",
     "inputSchema": {
@@ -1794,6 +2095,108 @@
     }
   },
   {
+    "name": "logbutler_status_add",
+    "description": "Add a custom status to a project (requires administrator permission). A project can have up to 8 custom statuses in addition to the 4 default ones. color is required and must be one of the allowed colors",
+    "inputSchema": {
+      "properties": {
+        "color": {
+          "description": "Background color. Must be one of: #ea2c00, #e87758, #e07b9a, #868cb7, #3b9dbd, #4caf93, #b0be3c, #eda62a, #f42858, #393939",
+          "type": "string"
+        },
+        "name": {
+          "description": "Status name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "color",
+        "name",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ステータス追加"
+    }
+  },
+  {
+    "name": "logbutler_status_delete",
+    "description": "Delete a project status (requires administrator permission). Issues that have the deleted status are moved to the substitute status. substitute_status_id is required. This cannot be undone",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        },
+        "status_id": {
+          "description": "Status ID to delete (see logbutler_meta_statuses)",
+          "type": "number"
+        },
+        "substitute_status_id": {
+          "description": "Status ID that replaces the deleted status on its issues (must be another existing status of the project)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "project_key",
+        "status_id",
+        "substitute_status_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ステータス削除"
+    }
+  },
+  {
+    "name": "logbutler_status_update",
+    "description": "Update the name and/or color of a project status (requires administrator permission). Specify at least one of name and color",
+    "inputSchema": {
+      "properties": {
+        "color": {
+          "description": "Background color. Must be one of: #ea2c00, #e87758, #e07b9a, #868cb7, #3b9dbd, #4caf93, #b0be3c, #eda62a, #f42858, #393939",
+          "type": "string"
+        },
+        "name": {
+          "description": "New status name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires administrator permission",
+          "type": "string"
+        },
+        "status_id": {
+          "description": "Status ID (see logbutler_meta_statuses)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "project_key",
+        "status_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "ステータス更新"
+    }
+  },
+  {
     "name": "logbutler_team_get",
     "description": "Get team details by team ID",
     "inputSchema": {
@@ -2025,6 +2428,123 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "ユーザー稼働状況取得"
+    }
+  },
+  {
+    "name": "logbutler_version_add",
+    "description": "Add a version (milestone) to a project (requires administrator permission). Dates are YYYY-MM-DD",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Version description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Version name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        },
+        "release_due_date": {
+          "description": "Release due date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "Start date in YYYY-MM-DD format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "バージョン追加"
+    }
+  },
+  {
+    "name": "logbutler_version_delete",
+    "description": "Delete a version (milestone) of a project (requires administrator permission). This cannot be undone",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Version ID to delete (see logbutler_meta_version)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "project_key",
+        "version_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "バージョン削除"
+    }
+  },
+  {
+    "name": "logbutler_version_update",
+    "description": "Update a version (milestone) of a project (requires administrator permission). name is required by Backlog; other fields are changed only when given. Dates are YYYY-MM-DD",
+    "inputSchema": {
+      "properties": {
+        "archived": {
+          "description": "true to archive the version",
+          "type": "boolean"
+        },
+        "description": {
+          "description": "Version description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Version name",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJECT). Requires project administrator permission",
+          "type": "string"
+        },
+        "release_due_date": {
+          "description": "Release due date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "Start date in YYYY-MM-DD format",
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Version ID (see logbutler_meta_version)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "project_key",
+        "version_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "バージョン更新"
     }
   },
   {

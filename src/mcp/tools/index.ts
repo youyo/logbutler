@@ -44,6 +44,7 @@ import {
 import { metaCategories, metaCustomField, metaIssueTypes, metaStatuses, metaVersion } from "./meta";
 import { notificationCount, notificationList } from "./notification";
 import { projectConventions, projectGet, projectList, projectUsers } from "./project";
+import { PROJECT_SETTINGS_TOOLS } from "./project-settings";
 import { sharedFileDownload, sharedFileList } from "./shared-file";
 import { spaceDiskUsage, spaceInfo } from "./space";
 import { starAdd } from "./star";
@@ -150,4 +151,6 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   notificationList,
   notificationCount,
   projectUsers,
+  // ADR 0013: プロジェクト設定ツール 12 個(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除)
+  ...PROJECT_SETTINGS_TOOLS,
 ];

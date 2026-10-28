@@ -106,6 +106,11 @@ const M06_TOOLS = ["notification_list", "notification_count", "project_users"].m
   (n) => `logbutler_${n}`,
 );
 
+/** ADR 0013 のプロジェクト設定ツール 12 個。logvalet に無い(ユーザー決定 2026-10-29)。 */
+const M07_TOOLS = ["category", "version", "status", "custom_field"].flatMap((r) =>
+  ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
+);
+
 async function listTools(): Promise<McpToolListing[]> {
   const { result } = await rpcTo(
     () => createMcpServer({ getClient: () => fakeClient(), onBacklogUnauthorized: () => {} }),
@@ -122,13 +127,13 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール = 74 ツールを公開している", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール = 86 ツールを公開している", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
     expect(names).toEqual(
-      [...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS, ...M05B_TOOLS, ...M06_TOOLS].sort(),
+      [...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS, ...M05B_TOOLS, ...M06_TOOLS, ...M07_TOOLS].sort(),
     );
-    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3);
-    expect(names).toHaveLength(74);
+    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12);
+    expect(names).toHaveLength(86);
   });
 
   it("M06 の 3 ツールは読み取り専用で、notification_* は notification、project_users は project の toolset", async () => {
@@ -172,6 +177,20 @@ describe("tools/list スナップショット", () => {
     for (const n of ["issue_related_delete", "issue_attachment_delete", "watching_delete"])
       expect(kind(n), n).toBe("Destructive");
     expect(kind("project_conventions")).toBe("ReadOnly");
+  });
+
+  it("プロジェクト設定の 12 ツールは project_settings の書き込みで、add は非冪等・update は冪等・delete は破壊的", async () => {
+    const byName = new Map((await listTools()).map((t) => [t.name, t.annotations]));
+    for (const n of M07_TOOLS) {
+      const a = byName.get(n) as Record<string, boolean>;
+      expect(a.readOnlyHint, n).toBe(false);
+      if (n.endsWith("_add"))
+        expect(a, n).toMatchObject({ destructiveHint: false, idempotentHint: false });
+      if (n.endsWith("_update"))
+        expect(a, n).toMatchObject({ destructiveHint: false, idempotentHint: true });
+      if (n.endsWith("_delete")) expect(a, n).toMatchObject({ destructiveHint: true });
+    }
+    expect(M07_TOOLS).toHaveLength(12);
   });
 
   it("M05A の 11 ツールはすべて分析系で、読み取り専用(ReadOnly)", async () => {
