@@ -33,7 +33,7 @@ Cloudflare MCP Server Portals 経由で使うことを前提にする。logvalet
 - MCP ツールは 71 個（R57 / 書き込み冪等 7 / 書き込み非冪等 4 / 破壊的 3）。正は `internal/mcp/testdata/tools_list_baseline.json`
 - MCP は `internal/render` を使っていない（出力は JSON のみ）。render・gantt・conventions のファイル読み込みは CLI 専用なので移植しない
 - 添付アップロードの `file_paths` はサーバー上のファイルを読むため Workers では不可。`file_content_base64`（上限 4MB）だけ残す
-- **Go 版の不具合の疑い**: `fetchProjectIssues` が `count` を指定しておらず、分析系（stale / blocker / workload / ambiguity / triage）が Backlog 既定の 20 件で打ち切られている可能性がある。**Go 版の出力をそのまま正解にしない**。分析ロジックの期待値はテストで決め直す（logvalet 側には別途 issue を立てる）
+- **Go 版の不具合の疑い**: `fetchProjectIssues` が `count` を指定しておらず、分析系（stale / blocker / workload / ambiguity / triage）が Backlog 既定の 20 件で打ち切られている可能性がある。**Go 版の出力をそのまま正解にしない**。分析ロジックの期待値はテストで決め直す（logvalet は凍結するため issue は立てない。2026-10-28 ユーザー決定。見つけた不具合は `docs/tool-diff-from-logvalet.md` に記録するのみ）
 - API 呼び出し数が膨らむツールがある: `digest_unified`（最悪 2,000 回超）、`user_activity` / `activity_stats`（期間指定時に上限なくページング）、`search`（プロジェクト数に比例）
 - Backlog は「1 ユーザーのリクエストは直列に」と案内している。Go 版の errgroup による並列呼び出しはこれに反する
 - リトライなし、429 は変換のみ、`Retry-After` 未対応
