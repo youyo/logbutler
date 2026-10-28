@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "logbutler",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-13",
+  // compatibility_date は、2 週間ルールで固定した workerd が対応する最新日 (2026-10-13)。作業日 2026-10-28 は workerd が拒否する。
+  // CIMD (Client ID Metadata Document) を使わない M01 では global_fetch_strictly_public は不要。
+  // nodejs_compat は必要になったときだけ足す。
+  "compatibility_flags": [],
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    // wrangler kv namespace create OAUTH_KV で作った id に差し替える (M07 のデプロイ時)
+    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }
+  ],
+  "vars": {
+    // これらは秘密ではない。デプロイ前に実値へ差し替える。
+    "BACKLOG_SPACE_HOST": "example.backlog.com",
+    "ACCESS_TEAM_DOMAIN": "example-team.cloudflareaccess.com",
+    "ACCESS_AUD": "replace-with-access-application-aud",
+    "PUBLIC_BASE_URL": "https://logbutler.example.com"
+  }
+  // secrets (wrangler secret put): BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET
+}

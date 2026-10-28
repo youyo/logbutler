@@ -1,0 +1,12 @@
+# ローカル開発用の秘密情報の雛形。コピーして .dev.vars を作り、実値を入れる(.dev.vars はコミットしない)。
+# 本番は `wrangler secret put <NAME>` で設定する。
+
+# Backlog スペースに登録した OAuth クライアント(スペース設定 > アプリケーション)の値
+BACKLOG_CLIENT_ID=
+BACKLOG_CLIENT_SECRET=
+
+# 以下は秘密ではないが、ローカルでは .dev.vars に置いて wrangler.jsonc の vars を上書きできる
+# BACKLOG_SPACE_HOST=example.backlog.com
+# ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+# ACCESS_AUD=
+# PUBLIC_BASE_URL=http://localhost:8787
