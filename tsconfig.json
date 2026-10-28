@@ -19,7 +19,8 @@
     "test",
     "vitest.config.ts",
     "scripts/verify-oauth/core.ts",
-    "scripts/verify-oauth/args.ts"
+    "scripts/verify-oauth/args.ts",
+    "scripts/render-wrangler-config/core.ts"
   ],
-  "exclude": ["test/node"]
+  "exclude": ["test/node", "test/node-e2e", "test/live"]
 }

@@ -10,7 +10,7 @@ Logbutler はまだ実デプロイしていない。これまでの ADR と `doc
 - **検証用の Backlog スペースとプロジェクトを使う**。書き込みを伴う項目(V08・V11)は、検証用プロジェクトでだけ行う。本番のスペースで試さない。
 - トークン・クライアントシークレット・`.verify-oauth.local.json` の中身を、この表・Issue・チャットに**貼らない**。値の代わりに「一致 / 不一致」「あり / なし」を書く。
 - 結果は `OK` / `NG` / `要対応` のどれかで記入し、`メモ` に日付・環境(例: `staging, 無料プラン`)・気づきを書く。NG は該当 ADR / tool-diff の「未検証の前提」を更新する。
-- 実施前の準備: runbook の手順 1〜4 を終え、`curl -s $BASE/healthz` が `{"status":"ok"}` を返すこと。
+- 実施前の準備: runbook の手順 0〜3(下流リポジトリ、Backlog アプリ、Cloudflare、Variables / Secrets とデプロイ)を終え、`curl -s $BASE/healthz` が `{"status":"ok"}` を返すこと。
 
 ## 実環境の OAuth 確認ツール `mise run verify:oauth`
 
@@ -180,7 +180,7 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 出典: [ADR 0010](adr/0010-startup-config-check.md)、CLAUDE.md の「トークンは grant の props にだけ置く」
 - 手順:
   1. デプロイ直後に `curl -s -o /dev/null -w '%{http_code}\n' $BASE/healthz` と本文を確認する(secrets 投入前なら `503` と欠けた項目名、投入後は `200`)。
-  2. V05 / V14 を実施したあと、Workers Logs(ダッシュボードまたは `wrangler tail --env production`)で、`access_token` `refresh_token` `Bearer ` `client_secret` の文字列を検索する。
+  2. V05 / V14 を実施したあと、Workers Logs(ダッシュボードまたは `mise run deploy:render` のあと `wrangler tail <Worker 名>`)で、`access_token` `refresh_token` `Bearer ` `client_secret` の文字列を検索する。
 - 期待結果: 1 は設定どおりの応答。2 はヒット 0 件(トークンやシークレットの値がログに出ない)。
 - 結果: healthz [ 503→200 / 200 ] ／ ログ検索 [ 0 件 / あり: ] ／ 判定 [ OK / NG ] ／ メモ:
 

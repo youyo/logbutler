@@ -1,5 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // このファイルは upstream の共有設定で、ローカル開発 (wrangler dev) とテスト (vitest) が読む。
+  // デプロイには使わない: アカウント固有の値 (Worker 名・KV id・ドメイン・Backlog スペース) をここに書くと、
+  // upstream の変更を pull するときに競合する。デプロイ用の設定は `mise run deploy:render` が、
+  // このファイルと LOGBUTLER_* 環境変数から wrangler.deploy.jsonc (gitignore 済み) に生成する (ADR 0011)。
+  // 生成時は name / kv_namespaces の OAUTH_KV の id / vars の BACKLOG_SPACE_HOST・PUBLIC_BASE_URL / routes / workers_dev だけが差し替わる。
+  // それ以外 (main, compatibility_date, compatibility_flags, observability, ほかの bindings など) は、ここに書いたものがそのまま下流に届く。
   "name": "logbutler",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-13",
@@ -9,42 +15,13 @@
   "compatibility_flags": [],
   "observability": { "enabled": true },
   "kv_namespaces": [
-    // ローカル開発・テスト用 (wrangler dev / vitest)。本番の id は env.production 側に書く。
+    // ローカル開発・テスト用のダミー id。デプロイ時は LOGBUTLER_KV_NAMESPACE_ID で差し替わる。
     { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }
   ],
   "vars": {
-    // これらは秘密ではない。デプロイ前に実値へ差し替える。
+    // ローカル開発・テスト用のダミー。デプロイ時は LOGBUTLER_BACKLOG_SPACE_HOST / LOGBUTLER_PUBLIC_BASE_URL で差し替わる。
     "BACKLOG_SPACE_HOST": "example.backlog.com",
     "PUBLIC_BASE_URL": "https://logbutler.example.com"
-  },
-  // secrets (wrangler secret put): BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET
-
-  // --- 本番環境 (wrangler deploy --env production / mise run deploy) ---
-  // 名前付き環境は vars / kv_namespaces / routes / observability を継承しないので、ここで全部書く。
-  // `<...>` のプレースホルダは、デプロイ前に docs/runbook.md の手順で実値へ書き換える。
-  // プレースホルダのまま起動した Worker は、設定チェックで /healthz 以外が 500 になる (ADR 0010)。
-  "env": {
-    "production": {
-      "name": "logbutler",
-      "observability": { "enabled": true },
-      "kv_namespaces": [
-        // 書き換え 1: `wrangler kv namespace create OAUTH_KV` が返す id (32 桁の 16 進)。
-        // 下の値はダミー (dry-run 用)。デプロイ前に実 id へ。
-        { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }
-      ],
-      "routes": [
-        // 書き換え 2: 公開するドメイン。<domain> を実際のホスト名 (例 logbutler.example.com) にする。
-        // そのドメインの DNS ゾーンが同じ Cloudflare アカウントにあること。
-        { "pattern": "<domain>", "custom_domain": true }
-      ],
-      "vars": {
-        // 書き換え 3: Backlog のスペースのホスト名 (例 example.backlog.com)。スキーム・スラッシュなし。
-        "BACKLOG_SPACE_HOST": "<space>.backlog.com",
-        // 書き換え 4: 上の routes と同じホストの https オリジン (末尾スラッシュ・パスなし)。
-        // Backlog の OAuth リダイレクト URI は `${PUBLIC_BASE_URL}/callback`。
-        "PUBLIC_BASE_URL": "https://<domain>"
-      }
-      // secrets (wrangler secret put <NAME> --env production): BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET
-    }
   }
+  // secrets (デプロイ先で wrangler secret put / --secrets-file): BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET
 }

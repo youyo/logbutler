@@ -83,8 +83,9 @@ mise run test           # unit + e2e
 mise run lint           # Biome + tsc
 mise run fmt            # Biome で整形
 mise run build          # デプロイせずバンドルできるか確認 (wrangler deploy --dry-run)
-mise run deploy:check   # 本番設定(env.production)の dry-run。Cloudflare には何も変更しない
-mise run deploy         # 本番へデプロイ(実行はユーザー。手順は docs/runbook.md)
+mise run deploy:check   # ダミー値でデプロイ設定を生成して dry-run。Cloudflare には何も変更しない
+mise run deploy:render  # LOGBUTLER_* からデプロイ用設定(wrangler.deploy.jsonc)を生成
+mise run deploy         # 生成してデプロイ(実行はユーザー。下流のデプロイは GitHub Actions。手順は docs/runbook.md)
 mise run verify:oauth -- https://<domain>/mcp   # 実環境の OAuth 確認(下記)
 mise run dev            # wrangler dev
 ```

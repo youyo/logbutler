@@ -26,12 +26,18 @@ const nodeProject = {
   test: { name: "node", environment: "node", include: ["test/node/**/*.test.ts"] },
 };
 
+// 生成スクリプトなどを実プロセスとして起動する E2E。workerd ではなく Node 環境で動かす。
+const nodeE2eProject = {
+  test: { name: "node-e2e", environment: "node", include: ["test/node-e2e/**/*.test.ts"] },
+};
+
 export default defineConfig({
   test: {
     projects: [
       project("unit", "test/unit/**/*.test.ts"),
       project("e2e", "test/e2e/**/*.test.ts"),
       nodeProject,
+      nodeE2eProject,
     ],
   },
 });

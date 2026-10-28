@@ -1,0 +1,63 @@
+name: Deploy
+
+# 下流リポジトリ(upstream を fork / ミラーしたもの)のデプロイ用。docs/runbook.md と ADR 0011 を参照。
+# Variables `LOGBUTLER_WORKER_NAME` が未設定の upstream では、ジョブごと飛ばす。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同じ Worker への多重デプロイを防ぐ(進行中のデプロイは止めず、順番に流す)。
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.LOGBUTLER_WORKER_NAME != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # アクションは ci.yml と同じコミット SHA(更新手順は ci.yml のコメント)。
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.9 # 公開 2026-10-13（2 週間ルール）
+      - run: mise run install
+      - run: mise run lint
+      - run: mise run test
+      # Variables からデプロイ用の設定(wrangler.deploy.jsonc)を生成する。値が欠けていれば項目名つきで失敗する。
+      - name: デプロイ用設定を生成
+        env:
+          LOGBUTLER_WORKER_NAME: ${{ vars.LOGBUTLER_WORKER_NAME }}
+          LOGBUTLER_KV_NAMESPACE_ID: ${{ vars.LOGBUTLER_KV_NAMESPACE_ID }}
+          LOGBUTLER_BACKLOG_SPACE_HOST: ${{ vars.LOGBUTLER_BACKLOG_SPACE_HOST }}
+          LOGBUTLER_PUBLIC_BASE_URL: ${{ vars.LOGBUTLER_PUBLIC_BASE_URL }}
+          LOGBUTLER_CUSTOM_DOMAIN: ${{ vars.LOGBUTLER_CUSTOM_DOMAIN }}
+        run: mise run deploy:render
+      # secrets は一時ファイル(自分だけが読める権限、ジョブ終了で消えるランナーの一時領域)経由で渡す。
+      # 値は環境変数から JSON に直接書き、echo やコマンドラインには出さない。
+      - name: デプロイ
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKLOG_CLIENT_ID: ${{ secrets.BACKLOG_CLIENT_ID }}
+          BACKLOG_CLIENT_SECRET: ${{ secrets.BACKLOG_CLIENT_SECRET }}
+        run: |
+          umask 077
+          secrets_file="$RUNNER_TEMP/logbutler-secrets.json"
+          trap 'rm -f "$secrets_file"' EXIT
+          node -e '
+            const { BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET } = process.env;
+            if (!BACKLOG_CLIENT_ID || !BACKLOG_CLIENT_SECRET) {
+              console.error("BACKLOG_CLIENT_ID / BACKLOG_CLIENT_SECRET の Secrets が未設定です");
+              process.exit(1);
+            }
+            process.stdout.write(JSON.stringify({ BACKLOG_CLIENT_ID, BACKLOG_CLIENT_SECRET }));
+          ' > "$secrets_file"
+          pnpm exec wrangler deploy -c wrangler.deploy.jsonc --secrets-file "$secrets_file"

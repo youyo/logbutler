@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "types": ["node", "@cloudflare/vitest-plugin/types"], "lib": ["ES2022"] },
-  "include": ["../scripts", "../test/node"],
+  "include": ["../scripts", "../test/node", "../test/node-e2e"],
   "exclude": []
 }

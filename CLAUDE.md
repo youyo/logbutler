@@ -24,8 +24,8 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - 読み取りツールには引数 `max_response_tokens`(応答サイズの安全網。既定 50000、0 で無効)が `defineTool` で自動的に付く。超過は切り詰めず `response_too_large`。ダウンロード系は `responseLimit: false`、書き込み系は対象外(ADR 0007)。呼び出し回数を調べるテストなど巨大な応答を返すものは `max_response_tokens: 0` を付ける。
 - Cloudflare Access 連携は持たない(ADR 0009)。利用者の制限は Logbutler の外側で行う。
 - **起動時の設定チェック**(`src/config-check.ts`、ADR 0010): 必須の vars / secrets / KV が欠けている・プレースホルダ(`<...>`)のままなら、`/healthz` 以外は 500、`/healthz` は 503 で項目名だけを返す。ログにも応答にも**値は出さない**。必須の設定を足したら `checkConfig` と unit / E2E を更新する。
-- **デプロイは実行しない**: `mise run deploy` はユーザーが行う。作業では `mise run deploy:check`(dry-run)までにする。`wrangler secret put` や KV の作成も実行しない(手順は `docs/runbook.md`)。
-- 本番設定は `wrangler.jsonc` の `env.production`(vars・KV・routes・observability は継承されないので全部書く)。プレースホルダの書き換え箇所はコメントに書いてある。
+- **デプロイは実行しない**: `mise run deploy` と `deploy:render` の実値での実行はユーザーが行う。作業では `mise run deploy:check`(ダミー値の dry-run)までにする。`wrangler secret put` や KV の作成も実行しない(手順は `docs/runbook.md`)。
+- **upstream / 下流モデル**(ADR 0011): このリポジトリは upstream で、`wrangler.jsonc` はローカル開発・テスト用のダミー値の共有設定(`env` ブロックなし)。アカウント固有の値(Worker 名・KV id・ドメイン・Backlog スペース・client id/secret)は**追跡ファイルに書かない**。デプロイは `mise run deploy:render` が `LOGBUTLER_*` 環境変数から gitignore 済みの `wrangler.deploy.jsonc` を生成し、`wrangler deploy -c` する(`mise.local.toml` の `[env]` / GitHub の Variables)。`wrangler.jsonc` のトップレベル(`compatibility_date` など)を変えれば下流に pull で届く。生成項目を足したら `scripts/render-wrangler-config/core.ts`・unit・E2E・runbook を更新する。
 - GitHub Actions は**コミット SHA で固定**する(`.github/workflows/ci.yml`)。更新時は `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で実在を確かめる。
 - ツール名の接頭辞は `logbutler_`。
 
@@ -46,6 +46,8 @@ src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`inde
 src/config-check.ts          起動時の設定チェック(ADR 0010)。src/index.ts が OAuthProvider の前に呼ぶ
 scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oauth`)。core.ts(Web 標準 API だけ。入出力は VerifyIo で注入)・args.ts・loopback.ts(node:http)・main.ts(Node 24 の型ストリップで直接実行。TS の enum / parameter property は使わない)
 .github/workflows/ci.yml     lint / test / deploy:check(アクションは SHA 固定)
+.github/workflows/deploy.yml 下流のデプロイ(Variable LOGBUTLER_WORKER_NAME が空の upstream では飛ばす)
+scripts/render-wrangler-config/  wrangler.jsonc + LOGBUTLER_* → wrangler.deploy.jsonc(core.ts: JSONC 読み・検証・差し替え。main.ts: 入出力。Node 24 の型ストリップで直接実行)
 docs/runbook.md  docs/manual-verification.md   デプロイ・運用の手順書と、未検証の前提の実機確認リスト(ADR の「未検証の前提」から V01〜 / P1〜 でリンクしている)
 src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)・activity-range.ts(期間つきのアクティビティ取得。maxId を必ず進める)・snippet.ts(コードポイント単位の抜粋)と、ツールごとの関数(digest 系は DigestEnvelope)
 src/backlog/client.ts         Backlog API クライアント(request / download。本文の読み取りも同じ期限)
@@ -54,7 +56,7 @@ test/unit/  test/e2e/  test/helpers/(tool-call.ts: 実クライアント + モ�
 
 ## テストの書き方
 
-- 実行環境は workerd(`@cloudflare/vitest-plugin`)。`vitest.config.ts` の `unit` / `e2e` の 2 プロジェクトと、Node 環境の `node` プロジェクト(`test/node/`。`node:http` が要る verify:oauth のループバック受信だけ。`test:unit` に含まれる)。
+- 実行環境は workerd(`@cloudflare/vitest-plugin`)。`vitest.config.ts` の `unit` / `e2e` の 2 プロジェクトと、Node 環境の `node` プロジェクト(`test/node/`。`node:http` が要る verify:oauth のループバック受信だけ。`test:unit` に含まれる)と `node-e2e` プロジェクト(`test/node-e2e/`。生成スクリプトを実プロセスで起動し、生成物を `wrangler deploy --dry-run -c` に通す。`test:e2e` に含まれる)。
 - workerd のテストで `cloudflare:test` を import しない(import すると並列実行時に他ファイルの初回リクエストがタイムアウトする)。Worker 全体を任意の env で呼ぶときは `import worker from "../../src/index"` に env とダミーの ctx を渡す(`test/e2e/config-check.test.ts`)。
 - verify:oauth の E2E(`test/e2e/verify-oauth.test.ts`)は、core を Worker とモック Backlog に対して動かし、ブラウザの段は `io.openBrowser` で `/authorize` → `/callback` を直接たどる。`main.ts` と `loopback.ts` の実機側は `test/node/` と手動確認。
 - README のツール一覧は `test/unit/readme-tools.test.ts` が `ALL_TOOLS` と突き合わせる。ツールを足したら README の表(toolset ごとの件数)も更新する。

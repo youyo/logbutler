@@ -25,5 +25,5 @@ jobs:
       - run: mise run install
       - run: mise run lint
       - run: mise run test
-      # デプロイ設定の dry-run。Cloudflare の認証情報は不要で、何も変更しない。
+      # デプロイ設定の生成(ダミー値)と dry-run。環境変数も Cloudflare の認証情報も不要で、何も変更しない。
       - run: mise run deploy:check

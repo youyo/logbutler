@@ -11,8 +11,8 @@ description = "Unit テスト (workerd 上で実行)"
 run = "pnpm exec vitest run --project unit --project node"
 
 [tasks."test:e2e"]
-description = "E2E テスト (Worker 全体に HTTP を送る。Backlog は outbound fetch のモック)"
-run = "pnpm exec vitest run --project e2e"
+description = "E2E テスト (Worker 全体に HTTP を送る。Backlog は outbound fetch のモック。node-e2e は生成スクリプトを実プロセスで起動)"
+run = "pnpm exec vitest run --project e2e --project node-e2e"
 
 [tasks."test:update-snapshots"]
 description = "tools/list のスナップショットを更新する (ツール定義を意図して変えたときだけ)"
@@ -38,13 +38,23 @@ run = "pnpm exec wrangler deploy --dry-run --outdir dist"
 description = "ローカル開発サーバー"
 run = "pnpm exec wrangler dev"
 
+[tasks."deploy:render"]
+description = "デプロイ用の wrangler 設定 (wrangler.deploy.jsonc、gitignore 済み) を wrangler.jsonc と LOGBUTLER_* 環境変数から生成する (ADR 0011)"
+run = "node scripts/render-wrangler-config/main.ts"
+
 [tasks."deploy:check"]
-description = "本番環境のデプロイを dry-run で検証する (Cloudflare へは何も変更しない。秘密情報も不要)"
-run = "pnpm exec wrangler deploy --env production --dry-run --outdir dist"
+description = "デプロイ設定の生成と wrangler の dry-run を、ダミー値で検証する (環境変数・秘密情報は不要。Cloudflare へは何も変更しない)"
+run = [
+  "node scripts/render-wrangler-config/main.ts --example",
+  "pnpm exec wrangler deploy --dry-run -c wrangler.deploy.example.jsonc --outdir dist",
+]
 
 [tasks.deploy]
-description = "本番環境へデプロイする (実行はユーザー。手順は docs/runbook.md)"
-run = "pnpm exec wrangler deploy --env production"
+description = "デプロイ設定を生成して Cloudflare へデプロイする (実行はユーザー。値は mise.local.toml の [env]。手順は docs/runbook.md)"
+run = [
+  "node scripts/render-wrangler-config/main.ts",
+  "pnpm exec wrangler deploy -c wrangler.deploy.jsonc",
+]
 
 [tasks."verify:oauth"]
 description = "実環境の OAuth 確認 (DCR → PKCE → ブラウザ → /token → MCP → refresh)。例: mise run verify:oauth -- https://<domain>/mcp"

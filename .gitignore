@@ -7,7 +7,12 @@ dist/
 mise.local.toml
 *.log
 .DS_Store
+.claude/handover
+.claude/settings.local.json
 
 # verify:oauth が保存する状態(リフレッシュトークンを含む)
 .verify-oauth.local.json
 *.local.json
+
+# デプロイ用に生成する wrangler 設定(アカウント固有の値を含む。ADR 0011)
+wrangler.deploy*.jsonc
