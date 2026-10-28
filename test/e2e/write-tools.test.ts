@@ -198,12 +198,12 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     const rw = (await rpcWith("false", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(rw, n).toContain(n);
     expect(rw).toContain("logbutler_project_conventions");
-    expect(rw).toHaveLength(38 + 14 + 1);
+    expect(rw).toHaveLength(38 + 14 + 1 + 11); // + M05A の分析 11(すべて ReadOnly)
 
     const ro = (await rpcWith("true", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(ro, n).not.toContain(n);
     expect(ro).toContain("logbutler_project_conventions");
-    expect(ro).toHaveLength(38 + 1);
+    expect(ro).toHaveLength(38 + 1 + 11);
 
     const blocked = await rpcWith("true", "tools/call", {
       name: "logbutler_watching_delete",

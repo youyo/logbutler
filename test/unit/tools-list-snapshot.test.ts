@@ -74,6 +74,21 @@ const M04_TOOLS = [
   "project_conventions",
 ].map((n) => `logbutler_${n}`);
 
+/** 計画書(plans/logbutler-m05-analysis-digest.md)の M05A: 分析系の加工ツール 11 個。 */
+const M05A_TOOLS = [
+  "issue_stale",
+  "project_blockers",
+  "user_workload",
+  "project_health",
+  "issue_context",
+  "issue_triage_materials",
+  "my_tasks",
+  "digest_daily",
+  "digest_weekly",
+  "issue_timeline",
+  "activity_stats",
+].map((n) => `logbutler_${n}`);
+
 async function listTools(): Promise<McpToolListing[]> {
   const { result } = await rpcTo(
     () => createMcpServer({ getClient: () => fakeClient(), onBacklogUnauthorized: () => {} }),
@@ -90,10 +105,10 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツールと M04 の 15 ツールを公開している(加工系の分析・digest は含まない)", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツールを公開している(M05B の digest・search は含まない)", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
-    expect(names).toEqual([...M03_TOOLS, ...M04_TOOLS].sort());
-    expect(names).toHaveLength(38 + 15);
+    expect(names).toEqual([...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS].sort());
+    expect(names).toHaveLength(38 + 15 + 11);
   });
 
   it("書き込み・破壊的ツール 14 個のカテゴリ(annotation)が計画書どおり", async () => {
@@ -126,12 +141,19 @@ describe("tools/list スナップショット", () => {
     expect(kind("project_conventions")).toBe("ReadOnly");
   });
 
-  it("logvalet の baseline と比べて、53 ツールすべてで差分がない(許容リストの分を除く)", async () => {
+  it("M05A の 11 ツールはすべて分析系で、読み取り専用(ReadOnly)", async () => {
+    const byName = new Map((await listTools()).map((t) => [t.name, t.annotations]));
+    for (const n of M05A_TOOLS) {
+      expect(byName.get(n), n).toMatchObject({ readOnlyHint: true, idempotentHint: true });
+    }
+  });
+
+  it("logvalet の baseline と比べて、64 ツールすべてで差分がない(許容リストの分を除く)", async () => {
     const result = compareWithBaseline(
       await listTools(),
       fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
       {
-        only: [...M03_TOOLS, ...M04_TOOLS],
+        only: [...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS],
         allowedChanges: ALLOWED_CHANGES,
         allowedMissing: ALLOWED_MISSING,
         allowedExtra: ALLOWED_EXTRA,

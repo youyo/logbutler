@@ -37,11 +37,13 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       const handler = createMcpHandler(
         () =>
           createMcpServer({
-            getClient: () =>
+            getClient: (options) =>
               createBacklogClient({
                 spaceHost: env.BACKLOG_SPACE_HOST,
                 accessToken: props.backlogAccessToken,
+                maxApiCalls: options.maxApiCalls,
               }),
+            spaceHost: env.BACKLOG_SPACE_HOST,
             toolConfig,
             timezone: env.LOGBUTLER_TIMEZONE,
             // 冪等キャッシュは OAUTH_KV の `idem:` 接頭辞のキーに置く（ADR 0005）。

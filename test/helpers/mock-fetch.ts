@@ -9,9 +9,23 @@ export interface RecordedCall {
 
 type Handler = (call: RecordedCall) => Response | Promise<Response>;
 
+/** 完全一致を優先し、なければ `*`(パスの 1 セグメント)を含むキーに一致するものを探す。 */
+function findHandler(handlers: Record<string, Handler>, key: string): Handler | undefined {
+  const exact = handlers[key];
+  if (exact) return exact;
+  for (const [pattern, handler] of Object.entries(handlers)) {
+    if (!pattern.includes("*")) continue;
+    const re = new RegExp(
+      `^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]+")}$`,
+    );
+    if (re.test(key)) return handler;
+  }
+  return undefined;
+}
+
 /**
  * outbound fetch のモック。登録していない宛先への通信は例外にし、実 Backlog・実 Access へ
- * 通信が漏れないことをテストで保証する。キーは "METHOD https://host/path"(クエリは含めない)。
+ * 通信が漏れないことをテストで保証する。キーは "METHOD https://host/path"(クエリは含めない。`*` はパスの 1 セグメントに一致)。
  */
 export function mockOutboundFetch(handlers: Record<string, Handler>) {
   const calls: RecordedCall[] = [];
@@ -27,7 +41,7 @@ export function mockOutboundFetch(handlers: Record<string, Handler>) {
         body: new TextDecoder().decode(await req.arrayBuffer()),
       };
       calls.push(call);
-      const handler = handlers[`${req.method} ${url.origin}${url.pathname}`];
+      const handler = findHandler(handlers, `${req.method} ${url.origin}${url.pathname}`);
       if (!handler) {
         throw new Error(`mockOutboundFetch: 想定外の outbound fetch ${req.method} ${req.url}`);
       }

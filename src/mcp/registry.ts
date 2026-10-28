@@ -87,6 +87,8 @@ export interface ToolContext {
   now: () => Date;
   /** 「今日」「今週」の基準になる IANA タイムゾーン(`LOGBUTLER_TIMEZONE`。既定 Asia/Tokyo)。 */
   timezone: string;
+  /** Backlog スペースのホスト(例 `example.backlog.com`)。分析系の出力の `space` / `base_url` の材料。 */
+  spaceHost: string;
 }
 
 export interface ToolDefinitionInput<S extends z.ZodObject> {
@@ -98,6 +100,11 @@ export interface ToolDefinitionInput<S extends z.ZodObject> {
   category: ToolCategory;
   toolset: Toolset;
   inputSchema: S;
+  /**
+   * このツール 1 回の呼び出しで許す Backlog API の回数(リトライ含む)。省略時はクライアントの既定(50)。
+   * ページングや課題ごとの取得で膨らむツールは、最悪ケースの式から決めて明示する(ADR 0006)。
+   */
+  maxApiCalls?: number;
   /** 戻り値は JSON にして text content に入れる。構造化出力(structuredContent)は使わない。 */
   handler: (args: z.infer<S>, ctx: ToolContext) => Promise<unknown>;
 }
@@ -108,6 +115,7 @@ export interface ToolDefinition {
   readonly category: ToolCategory;
   readonly toolset: Toolset;
   readonly inputSchema: z.ZodObject;
+  readonly maxApiCalls?: number;
   readonly annotations: ToolAnnotations;
   /** 引数は SDK が inputSchema で検証済みのものだけが来る。 */
   readonly handler: (args: unknown, ctx: ToolContext) => Promise<unknown>;
@@ -125,6 +133,7 @@ export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>)
     category: input.category,
     toolset: input.toolset,
     inputSchema: input.inputSchema,
+    ...(input.maxApiCalls === undefined ? {} : { maxApiCalls: input.maxApiCalls }),
     annotations: annotationsFor(input.category, input.title),
     handler: (args, ctx) => input.handler(args as z.infer<S>, ctx),
   };
@@ -183,8 +192,13 @@ export function selectTools(
 }
 
 export interface RegisterDeps {
-  /** tools/call ごとに呼ぶ。1 回のツール呼び出しにつき 1 クライアント。 */
-  getClient: () => BacklogClient;
+  /**
+   * tools/call ごとに呼ぶ。1 回のツール呼び出しにつき 1 クライアント。
+   * ツールが `maxApiCalls` を宣言していれば渡す(宣言がなければ空のオブジェクト)。
+   */
+  getClient: (options: { maxApiCalls?: number }) => BacklogClient;
+  /** Backlog スペースのホスト。省略時は空文字。 */
+  spaceHost?: string;
   /** Backlog が 401 を返したとき(MCP の応答も HTTP 401 にするための合図)。 */
   onBacklogUnauthorized: () => void;
   /** 現在時刻。省略時は `new Date()`。 */
@@ -257,9 +271,12 @@ export function registerTools(
         try {
           const parsed = tool.inputSchema.safeParse(args ?? {});
           if (!parsed.success) throw new ArgumentError(describeIssues(parsed.error));
-          client = deps.getClient();
+          client = deps.getClient(
+            tool.maxApiCalls === undefined ? {} : { maxApiCalls: tool.maxApiCalls },
+          );
           const toolCtx: ToolContext = {
             client,
+            spaceHost: deps.spaceHost ?? "",
             now: deps.now ?? (() => new Date()),
             timezone: deps.timezone || DEFAULT_TIMEZONE,
           };

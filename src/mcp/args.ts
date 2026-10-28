@@ -149,7 +149,7 @@ const toYmd = (t: Date): Ymd => ({
   m: t.getUTCMonth() + 1,
   d: t.getUTCDate(),
 });
-const addDays = (ymd: Ymd, days: number): Ymd => {
+export const addDays = (ymd: Ymd, days: number): Ymd => {
   const t = utcDate(ymd);
   t.setUTCDate(t.getUTCDate() + days);
   return toYmd(t);
@@ -253,4 +253,9 @@ export async function resolveProjectId(client: BacklogClient, projectKey: string
   const project = await client.request<{ id: number }>("GET", `/projects/${seg(projectKey)}`);
   cache.set(projectKey, project.id);
   return project.id;
+}
+
+/** 「days」のような閾値。0 以下・未指定は既定値(logvalet は 0 以下を無視して既定を使う)。 */
+export function positiveOr(value: number | undefined, fallback: number): number {
+  return value !== undefined && value > 0 ? value : fallback;
 }

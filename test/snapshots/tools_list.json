@@ -36,6 +36,106 @@
     }
   },
   {
+    "name": "logbutler_activity_stats",
+    "description": "Get activity statistics (by type, actor, date, hour, patterns)",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (required when scope=project)",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Activity scope: project, user, or space (default: space)",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date in YYYY-MM-DD format (default: 7 days ago)",
+          "type": "string"
+        },
+        "top_n": {
+          "description": "Number of top actors/types to include (default: 5)",
+          "type": "number"
+        },
+        "until": {
+          "description": "End date in YYYY-MM-DD format (default: now)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User ID (required when scope=user)",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "アクティビティ統計取得"
+    }
+  },
+  {
+    "name": "logbutler_digest_daily",
+    "description": "Generate daily periodic digest for a project (completed/started/blocked)",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date in YYYY-MM-DD format (default: 1 day ago)",
+          "type": "string"
+        },
+        "until": {
+          "description": "End date in YYYY-MM-DD format (default: now)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "日次ダイジェスト取得"
+    }
+  },
+  {
+    "name": "logbutler_digest_weekly",
+    "description": "Generate weekly periodic digest for a project (completed/started/blocked)",
+    "inputSchema": {
+      "properties": {
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        },
+        "since": {
+          "description": "Start date in YYYY-MM-DD format (default: 7 days ago)",
+          "type": "string"
+        },
+        "until": {
+          "description": "End date in YYYY-MM-DD format (default: now)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "週次ダイジェスト取得"
+    }
+  },
+  {
     "name": "logbutler_document_create",
     "description": "Create a new document in a project",
     "inputSchema": {
@@ -360,6 +460,40 @@
     }
   },
   {
+    "name": "logbutler_issue_context",
+    "description": "Get structured issue context with signals and LLM hints for analysis",
+    "inputSchema": {
+      "properties": {
+        "comments": {
+          "description": "Max number of recent comments to include (default 10)",
+          "type": "number"
+        },
+        "compact": {
+          "description": "Omit description and comment bodies (default false)",
+          "type": "boolean"
+        },
+        "include_related_issues": {
+          "description": "Include related issues (default true)",
+          "type": "boolean"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJ-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題コンテキスト取得"
+    }
+  },
+  {
     "name": "logbutler_issue_create",
     "description": "Create a new issue",
     "inputSchema": {
@@ -609,6 +743,104 @@
     }
   },
   {
+    "name": "logbutler_issue_stale",
+    "description": "Detect stale issues in specified projects",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days threshold for stale detection (default 7)",
+          "type": "number"
+        },
+        "exclude_status": {
+          "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
+          "type": "string"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys (e.g. 'PROJ1,PROJ2')",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_keys"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "停滞課題一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_timeline",
+    "description": "Get comment and update timeline for an issue (structured chronological events)",
+    "inputSchema": {
+      "properties": {
+        "include_updates": {
+          "description": "Include update history events (default true)",
+          "type": "boolean"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJ-123)",
+          "type": "string"
+        },
+        "max_activity_pages": {
+          "description": "Max pages for activity pagination (default 5)",
+          "type": "number"
+        },
+        "max_comments": {
+          "description": "Max number of comments to include (0 = all, default 0)",
+          "type": "number"
+        },
+        "since": {
+          "description": "Filter events since date (YYYY-MM-DD)",
+          "type": "string"
+        },
+        "until": {
+          "description": "Filter events until date (YYYY-MM-DD)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題タイムライン取得"
+    }
+  },
+  {
+    "name": "logbutler_issue_triage_materials",
+    "description": "Get triage materials for an issue (stats, similar issues, history)",
+    "inputSchema": {
+      "properties": {
+        "include_related_issues": {
+          "description": "Include related issues (default true)",
+          "type": "boolean"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJ-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "課題トリアージ材料取得"
+    }
+  },
+  {
     "name": "logbutler_issue_update",
     "description": "Update an existing issue",
     "inputSchema": {
@@ -802,6 +1034,64 @@
     }
   },
   {
+    "name": "logbutler_my_tasks",
+    "description": "Get your personal task dashboard: overdue, upcoming, and watched issues with stale/overdue signals",
+    "inputSchema": {
+      "properties": {
+        "mode": {
+          "description": "View mode: 'week' (this week Mon-Sun, default) or 'next' (next 4-6 business days)",
+          "type": "string"
+        },
+        "stale_days": {
+          "description": "Days threshold for stale detection on watched issues (default 7)",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "自分のタスク一覧取得"
+    }
+  },
+  {
+    "name": "logbutler_project_blockers",
+    "description": "Detect project blocker issues (high priority unassigned, long in-progress, overdue)",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days threshold for in-progress stagnation (default 14)",
+          "type": "number"
+        },
+        "exclude_status": {
+          "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
+          "type": "string"
+        },
+        "include_comments": {
+          "description": "Enable blocked-by-keyword detection via latest comment (default false)",
+          "type": "boolean"
+        },
+        "project_keys": {
+          "description": "Comma-separated project keys (e.g. 'PROJ1,PROJ2')",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_keys"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクトブロッカー一覧取得"
+    }
+  },
+  {
     "name": "logbutler_project_conventions",
     "description": "Show the operating conventions adopted by a project (rule issue), with a glossary",
     "inputSchema": {
@@ -843,6 +1133,40 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "プロジェクト詳細取得"
+    }
+  },
+  {
+    "name": "logbutler_project_health",
+    "description": "Get project health summary (stale, blockers, workload, score)",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days threshold for stale/blocker detection (default 7)",
+          "type": "number"
+        },
+        "exclude_status": {
+          "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
+          "type": "string"
+        },
+        "include_comments": {
+          "description": "Enable blocked-by-keyword detection via comments (default false)",
+          "type": "boolean"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "プロジェクトヘルス取得"
     }
   },
   {
@@ -1110,6 +1434,36 @@
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "認証ユーザー情報取得"
+    }
+  },
+  {
+    "name": "logbutler_user_workload",
+    "description": "Calculate user workload distribution for a project",
+    "inputSchema": {
+      "properties": {
+        "days": {
+          "description": "Days threshold for stale detection (default 7)",
+          "type": "number"
+        },
+        "exclude_status": {
+          "description": "Comma-separated status names to exclude (e.g. '完了,対応済み')",
+          "type": "string"
+        },
+        "project_key": {
+          "description": "Project key (e.g. PROJ)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ユーザー稼働状況取得"
     }
   },
   {

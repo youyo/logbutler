@@ -154,7 +154,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     };
 
     const all = await list("all");
-    expect(all).toHaveLength(38 + 15); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions
+    expect(all).toHaveLength(38 + 15 + 11); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions + M05A の分析 11
     expect(all).toContain("logbutler_issue_list");
 
     const wikiOnly = await list("wiki");

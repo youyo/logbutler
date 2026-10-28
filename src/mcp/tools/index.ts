@@ -1,5 +1,18 @@
 import type { ToolDefinition } from "../registry";
 import { activityList } from "./activity";
+import {
+  activityStats,
+  digestDaily,
+  digestWeekly,
+  issueContext,
+  issueStale,
+  issueTimeline,
+  issueTriageMaterials,
+  myTasks,
+  projectBlockers,
+  projectHealth,
+  userWorkload,
+} from "./analysis";
 import { documentCreate, documentGet, documentList, documentTree } from "./document";
 import {
   issueAttachmentDownload,
@@ -47,7 +60,7 @@ import {
   wikiTags,
 } from "./wiki";
 
-/** 公開するツールの一覧。M03 の読み取りツール(単純系)と M04 の書き込みツール。M05 以降のツールはここに足す。 */
+/** 公開するツールの一覧。M03 の読み取りツール(単純系)、M04 の書き込みツール、M05A の分析ツール。M05B 以降のツールはここに足す。 */
 export const ALL_TOOLS: readonly ToolDefinition[] = [
   metaStatuses,
   metaIssueTypes,
@@ -103,4 +116,16 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   issueAttachmentDelete,
   watchingDelete,
   projectConventions,
+  // M05A: 分析系の加工ツール 11 個
+  issueStale,
+  projectBlockers,
+  userWorkload,
+  projectHealth,
+  issueContext,
+  issueTriageMaterials,
+  myTasks,
+  digestDaily,
+  digestWeekly,
+  issueTimeline,
+  activityStats,
 ];

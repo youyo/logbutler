@@ -77,8 +77,13 @@ export async function callTool(
   const res = await rpcTo(
     () =>
       createMcpServer({
-        getClient: () =>
-          createBacklogClient({ spaceHost: "example.backlog.com", accessToken: TEST_TOKEN }),
+        getClient: (options) =>
+          createBacklogClient({
+            spaceHost: "example.backlog.com",
+            accessToken: TEST_TOKEN,
+            maxApiCalls: options.maxApiCalls,
+          }),
+        spaceHost: "example.backlog.com",
         onBacklogUnauthorized: () => {},
         now: opts.now ? () => opts.now as Date : undefined,
         timezone: opts.timezone,
