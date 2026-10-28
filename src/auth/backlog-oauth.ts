@@ -131,5 +131,16 @@ async function requestTokens(
   if (!accessToken || !refreshToken || expiresIn === undefined) {
     throw new BacklogOAuthError("invalid_response", "Backlog token response is missing fields");
   }
+  // 診断ログ: 値は出さず、寿命の秒数とローテーションの有無だけ(実際の寿命との食い違いを調べるため)。
+  console.log(
+    JSON.stringify({
+      event: "backlog_token",
+      grant_type: grant.grant_type,
+      expires_in: expiresIn,
+      ...(fallbackRefreshToken === undefined
+        ? {}
+        : { refresh_token_rotated: refreshToken !== fallbackRefreshToken }),
+    }),
+  );
   return { accessToken, refreshToken, expiresAt: now + expiresIn * 1000 };
 }

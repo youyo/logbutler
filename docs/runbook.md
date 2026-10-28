@@ -187,6 +187,10 @@ Portal に登録するときの注意:
 | `{"event":"config_invalid","missing":[...],"invalid":[...]}` | 設定チェックの失敗。項目名だけ(値は出ない)。`/healthz` にも同じ内容が出る |
 | `tool <名前> failed unexpectedly: ...` | ツールで想定外の例外(トークンは伏せ字) |
 | `idempotency cache read/write failed: ...` | 冪等キャッシュ(KV)の失敗。ツールは止まらない |
+| `{"event":"backlog_token","grant_type":"authorization_code"\|"refresh_token","expires_in":N,"refresh_token_rotated":true\|false}` | Backlog のトークン取得・更新。`expires_in` は Backlog が返した寿命(秒)。`refresh_token_rotated` は更新時だけ(リフレッシュトークンが変わったか) |
+| `{"event":"token_exchange","grant_type":...,"backlog_remaining_seconds":N,"needs_refresh":bool,"stale_marker":bool,"refreshed":bool,"access_token_changed":bool,"ttl_basis":"new_token"\|"backlog_remaining","access_token_ttl":N}` | MCP のトークン発行・更新のたびの判定(ADR 0014)。残り秒数は `props` 上の Backlog の期限まで(更新前)。`needs_refresh` は保存期限を過ぎている(残り 0 以下)。Backlog を更新するのは `needs_refresh` か `stale_marker` のときだけ。`access_token_changed` は Backlog を更新したときだけ(`false` なら Backlog が同じアクセストークンを返した)。`ttl_basis` は MCP の寿命の決め方: `new_token` は新しい期限 - 60 秒、`backlog_remaining` は Backlog の残り + 5 秒(上限 1800・下限 60)。期限内に `access_token_ttl` が小さくなるのは想定どおり(次の更新を失効直後に来させる) |
+| `{"event":"backlog_unauthorized","backlog_remaining_seconds":N,"stale_marked":bool}` | `/mcp` で Backlog が 401。残り秒数が正なら保存期限より前に失効している(ADR 0001 の未検証 5)。`stale_marked` は次の更新で Backlog を更新させる印を置けたか |
+| `{"event":"backlog_stale_read_failed"}` / `{"event":"backlog_stale_clear_failed"}` | 印(KV)の読み取り・削除の失敗。更新は期限による判定で続く |
 
 ### 5-2. Backlog の client secret のローテーション
 
@@ -205,6 +209,7 @@ Portal に登録するときの注意:
 | `grant:<backlogUserId>:<grantId>` | ユーザーごとの認可(**Backlog のトークンを含む `props`**。ライブラリが暗号化して保存) |
 | `token:<backlogUserId>:<grantId>:<id>` | Worker が発行した MCP のアクセストークン / リフレッシュトークンの記録(ハッシュ) |
 | `idem:<backlogUserId>:<ツール名>:...` | 書き込みツールの冪等キャッシュ(TTL 5 分。ツールの結果の JSON。ADR 0005) |
+| `backlog-stale:<backlogUserId>:<grantId>` | `/mcp` で Backlog が 401 を返した grant の印(TTL 15 分。値は `1` だけでトークンは入らない)。次の MCP の更新で Backlog も更新し、成功したら消える(ADR 0001 の未検証 5) |
 
 ### 5-4. ユーザーの接続を無効化する(grant の削除)
 

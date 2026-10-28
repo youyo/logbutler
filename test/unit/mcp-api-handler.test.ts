@@ -76,6 +76,150 @@ describe("MCP API handler (/mcp の下流)", () => {
     expect(await res.text()).not.toContain("backlog-at");
   });
 
+  describe("Backlog の 401 で grant に更新の印を置く", () => {
+    const MCP_TOKEN = "42:grant-unit-1:mcp-secret-value";
+    const authCtx = {
+      waitUntil() {},
+      passThroughOnException() {},
+      props: { ...props, backlogExpiresAt: Date.now() + 2_000_000 },
+      auth: { token: MCP_TOKEN, audience: "https://logbutler.test/mcp", scope: [], userId: "42" },
+    } as unknown as ExecutionContext;
+    const call = (testEnv: object = env) =>
+      createMcpApiHandler().fetch(
+        new Request("https://logbutler.test/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "logbutler_user_me", arguments: {} },
+          }),
+        }),
+        testEnv as typeof env,
+        authCtx,
+      );
+
+    it("Backlog が 401 なら backlog-stale:<userId>:<grantId> を KV に置く(値にトークンは入らない)", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockOutboundFetch({ [MYSELF]: () => jsonResponse({}, 401) });
+      const res = await call();
+      expect(res.status).toBe(401);
+      const value = await env.OAUTH_KV.get("backlog-stale:42:grant-unit-1");
+      expect(value).not.toBeNull();
+      for (const secret of ["backlog-at", "backlog-rt", "mcp-secret-value"]) {
+        expect(value).not.toContain(secret);
+      }
+    });
+
+    it("Backlog が 200 なら印を置かない", async () => {
+      mockOutboundFetch({
+        [MYSELF]: () => jsonResponse({ id: 42, userId: "alice", name: "Alice" }),
+      });
+      const ctx2 = {
+        ...authCtx,
+        auth: { token: "42:grant-unit-ok:secret", audience: "x", scope: [], userId: "42" },
+      } as unknown as ExecutionContext;
+      const res = await createMcpApiHandler().fetch(
+        new Request("https://logbutler.test/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "logbutler_user_me", arguments: {} },
+          }),
+        }),
+        env,
+        ctx2,
+      );
+      expect(res.status).toBe(200);
+      expect(await env.OAUTH_KV.get("backlog-stale:42:grant-unit-ok")).toBeNull();
+    });
+
+    it.each([403, 404, 429, 500])(
+      "Backlog が %i なら印を置かない(401 のときだけ置く)",
+      async (status) => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        mockOutboundFetch({ [MYSELF]: () => jsonResponse({}, status) });
+        const ctx3 = {
+          ...authCtx,
+          auth: { token: `42:grant-unit-${status}:secret`, audience: "x", scope: [], userId: "42" },
+        } as unknown as ExecutionContext;
+        const res = await createMcpApiHandler().fetch(
+          new Request("https://logbutler.test/mcp", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json, text/event-stream",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "logbutler_user_me", arguments: {} },
+            }),
+          }),
+          env,
+          ctx3,
+        );
+        expect(res.status).not.toBe(401);
+        expect(await env.OAUTH_KV.get(`backlog-stale:42:grant-unit-${status}`)).toBeNull();
+      },
+      30_000,
+    );
+
+    it("KV への書き込みが失敗しても 401 は返す", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockOutboundFetch({ [MYSELF]: () => jsonResponse({}, 401) });
+      const brokenKv = {
+        ...env.OAUTH_KV,
+        get: env.OAUTH_KV.get.bind(env.OAUTH_KV),
+        put: async () => {
+          throw new Error("kv down");
+        },
+      };
+      const res = await call({ ...env, OAUTH_KV: brokenKv });
+      expect(res.status).toBe(401);
+    });
+
+    it("401 の診断ログに props 上の残り秒数と印の結果を出し、トークンは出さない", async () => {
+      const lines: string[] = [];
+      for (const level of ["log", "info", "warn", "error"] as const) {
+        vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+          lines.push(args.map(String).join(" "));
+        });
+      }
+      mockOutboundFetch({ [MYSELF]: () => jsonResponse({}, 401) });
+      await call();
+      const event = lines
+        .flatMap((l) => {
+          try {
+            return [JSON.parse(l) as Record<string, unknown>];
+          } catch {
+            return [];
+          }
+        })
+        .find((e) => e.event === "backlog_unauthorized");
+      expect(event).toMatchObject({ event: "backlog_unauthorized", stale_marked: true });
+      expect(typeof event?.backlog_remaining_seconds).toBe("number");
+      // props の期限は約 2000 秒後
+      expect(event?.backlog_remaining_seconds as number).toBeGreaterThan(1900);
+      expect(event?.backlog_remaining_seconds as number).toBeLessThanOrEqual(2000);
+      const all = lines.join("\n");
+      for (const secret of ["backlog-at", "backlog-rt", "mcp-secret-value", MCP_TOKEN]) {
+        expect(all).not.toContain(secret);
+      }
+    });
+  });
+
   describe("URL クエリ(toolsets / read_only)", () => {
     const names = async (query: string) => {
       const res = await listTools(env, query);

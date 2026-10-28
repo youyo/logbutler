@@ -38,6 +38,7 @@ src/app.ts                    Hono: /healthz, /authorize(同意), /callback。Ac
 src/auth/authorization-server.ts  OAuthProvider の設定(/mcp は apiHandler、それ以外は app.ts)
 src/auth/backlog-oauth.ts     Backlog の認可 URL・コード交換・リフレッシュ(ローテーション有無の両対応)
 src/auth/token-exchange.ts    tokenExchangeCallback: MCP トークン更新時に Backlog も更新
+src/auth/backlog-stale.ts     Backlog の 401 を受けた grant に印を置き、次の MCP トークン更新で(期限に関係なく)Backlog も更新させる
 src/auth/consent-page.ts      同意画面(クライアント由来の文字列は必ずエスケープ)
 src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変換
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)

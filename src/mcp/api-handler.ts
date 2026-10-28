@@ -1,4 +1,6 @@
+import type { OAuthResourceContext } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
+import { grantRefFromAccessToken, markBacklogStale } from "../auth/backlog-stale";
 import type { GrantProps } from "../auth/props";
 import { createBacklogClient } from "../backlog/client";
 import type { Env } from "../env";
@@ -15,11 +17,15 @@ import { ALL_TOOLS } from "./tools";
  *
  * Backlog が 401 を返したら、MCP の応答も HTTP 401 + invalid_token にして、
  * MCP クライアントにリフレッシュ(tokenExchangeCallback 経由で Backlog も更新)させる。
+ * そのとき grant に「Backlog の更新が必要」という印を置く(保存した期限より先に Backlog 側で失効した場合でも、
+ * 次のリフレッシュで期限に関係なく Backlog を更新させるため。backlog-stale.ts)。
  */
 export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetch">> {
   return {
     async fetch(request, env, ctx) {
-      const props = (ctx as ExecutionContext<GrantProps>).props;
+      const oauthCtx = ctx as Partial<OAuthResourceContext<GrantProps>> &
+        ExecutionContext<GrantProps>;
+      const props = oauthCtx.props;
       let backlogUnauthorized = false;
 
       // toolsets / read_only は接続 URL のクエリで決まる(ADR 0008)。不正な値は 400 で理由を返す。
@@ -61,6 +67,25 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       if (request.method !== "POST") return response;
       const body = await response.text();
       if (backlogUnauthorized) {
+        // 印はクライアントが直後に叩く /token より先に書き終える(waitUntil にしない)。失敗しても 401 は返す。
+        let staleMarked = false;
+        const ref = grantRefFromAccessToken(oauthCtx.auth?.token);
+        if (ref) {
+          try {
+            await markBacklogStale(env.OAUTH_KV, ref.userId, ref.grantId);
+            staleMarked = true;
+          } catch {
+            staleMarked = false;
+          }
+        }
+        // 診断ログ(値は出さない): props 上の Backlog トークンの残り秒数。負なら保存期限どおりの失効。
+        console.warn(
+          JSON.stringify({
+            event: "backlog_unauthorized",
+            backlog_remaining_seconds: Math.floor((props.backlogExpiresAt - Date.now()) / 1000),
+            stale_marked: staleMarked,
+          }),
+        );
         return new Response(JSON.stringify({ error: "invalid_token" }), {
           status: 401,
           headers: {

@@ -135,3 +135,61 @@ describe("refreshTokens", () => {
     expect((err as BacklogOAuthError).kind).toBe("invalid_response");
   });
 });
+
+describe("診断ログ(backlog_token)", () => {
+  function captureLogs() {
+    const lines: string[] = [];
+    for (const level of ["log", "info", "warn", "error"] as const) {
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        lines.push(args.map(String).join(" "));
+      });
+    }
+    return lines;
+  }
+
+  it("コード交換: expires_in の秒数だけを出す(トークン・client_secret は出さない)", async () => {
+    const lines = captureLogs();
+    mockOutboundFetch({
+      [TOKEN_ENDPOINT]: () =>
+        jsonResponse({ access_token: "at-1", refresh_token: "rt-1", expires_in: 3599 }),
+    });
+    await exchangeCode(cfg, { code: "code-1", redirectUri: "https://lb.test/callback" }, NOW);
+    expect(lines.map((l) => JSON.parse(l))).toEqual([
+      { event: "backlog_token", grant_type: "authorization_code", expires_in: 3599 },
+    ]);
+    for (const secret of ["at-1", "rt-1", "csecret", "code-1"]) {
+      expect(lines.join("\n")).not.toContain(secret);
+    }
+  });
+
+  it("更新: リフレッシュトークンが変わったか(ローテーション)を true / false で出す", async () => {
+    const lines = captureLogs();
+    mockOutboundFetch({
+      [TOKEN_ENDPOINT]: () =>
+        jsonResponse({ access_token: "at-2", refresh_token: "rt-2", expires_in: 3600 }),
+    });
+    await refreshTokens(cfg, "rt-1", NOW);
+    mockOutboundFetch({
+      [TOKEN_ENDPOINT]: () =>
+        jsonResponse({ access_token: "at-3", refresh_token: "rt-1", expires_in: 3600 }),
+    });
+    await refreshTokens(cfg, "rt-1", NOW);
+    expect(lines.map((l) => JSON.parse(l))).toEqual([
+      {
+        event: "backlog_token",
+        grant_type: "refresh_token",
+        expires_in: 3600,
+        refresh_token_rotated: true,
+      },
+      {
+        event: "backlog_token",
+        grant_type: "refresh_token",
+        expires_in: 3600,
+        refresh_token_rotated: false,
+      },
+    ]);
+    for (const secret of ["at-2", "at-3", "rt-1", "rt-2", "csecret"]) {
+      expect(lines.join("\n")).not.toContain(secret);
+    }
+  });
+});

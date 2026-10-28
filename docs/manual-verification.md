@@ -58,7 +58,9 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
      unset CLIENT_SECRET CODE T1 T2 T3 R1
      ```
 - 期待結果: 実装はどちらでも動く。ローテーションする(`いいえ`でなく`はい`)場合は、最後の行が `false`(古いものが失効)なら競合に弱いので、V02 を丁寧に確認する。
-- 結果: ローテーション [ はい / いいえ ] ／ 古いトークンの再利用 [ 可 / 不可 ] ／ 判定 [ OK / NG / 要対応 ] ／ メモ:
+- 結果: ローテーション [ **いいえ**(少なくとも有効期限内の更新で同じアクセストークンが返るとき) ] ／ 古いトークンの再利用 [ 未確認(ローテーションしないので同じリフレッシュトークンを使い続ける) ] ／ 判定 [ OK ] ／ メモ: 2026-10-29 04:29 の検証用 Worker のログ `backlog_token` `{"grant_type":"refresh_token","expires_in":1755,"refresh_token_rotated":false}`。失効後の更新でローテーションするかは未観測(実装は両対応)。
+- 運用中のログでも確認できる: `{"event":"backlog_token","grant_type":"refresh_token",...,"refresh_token_rotated":true|false}`(値は出ない。runbook 5-1)。
+- 2026-10-29 の観測(ADR 0001 の未検証 5): 保存期限より先に Backlog のトークンが 401 になった。あわせて、更新で**アクセストークン**が変わったか(`token_exchange` の `access_token_changed`)も記録する。同じトークンが返るなら、`expires_in` を信じて期限を延ばすと実際より遅い期限を保存することになる。
 
 ### V02 KV の結果整合性がリフレッシュ直後のトークン利用に影響しないか
 
@@ -66,12 +68,14 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 目的: リフレッシュ直後に別ロケーションの isolate が古い `props`(失効済みの Backlog リフレッシュトークン)を読んで `invalid_grant` にならないか。V01 でローテーションする場合に重要(しない場合は影響なし)。
 - 手順:
   1. `mise run verify:oauth -- $BASE/mcp` を実行して成功させる(状態が保存される)。
-  2. Backlog のアクセストークンが期限(`expires_in`、V03)に近づくまで待つ。MCP のトークン更新で Backlog も更新される条件は「Backlog の残り < 約 31 分」なので、**認可の約 30 分後〜期限前**に次を行う。
+  2. Backlog のアクセストークンが期限(`expires_in`、V03)に近づくまで待つ。MCP のトークン更新で Backlog も更新される条件は「Backlog の保存期限を過ぎている、または stale 印がある」(ADR 0014。期限内の更新は同じトークンが返るだけなので行わない)なので、**認可の約 1 時間後(Backlog の失効直後)**に次を行う。
   3. `mise run verify:oauth -- $BASE/mcp --refresh-only` を、**間隔をあけずに 5 回以上連続で**、できれば別のネットワーク(スマートフォンのテザリングなど、別ロケーションに届く経路)からも実行する。
   4. 最初の更新から 2 分以内に、別経路から `--refresh-only` と `tools/call` を行う(KV の伝播が最大 60 秒ほどかかる想定)。
   5. `mise run verify:oauth -- https://<domain>/mcp --refresh-only` を同時に 3〜5 本起動する（例: シェルで各コマンドに `&` を付けて並列実行し、最後に `wait`）。
 - 期待結果: すべて `user_me_after_refresh` が OK。`invalid_grant`(`authorize を再度` の案内)や 503 が出ない。出た場合は NG とし、発生の間隔・経路を記録する。並列実行（手順 5）: すべて成功する。V01 で Backlog のリフレッシュトークンがローテーションすると分かった場合、1 本以上が invalid_grant で失敗するなら ADR 0001 の未検証 1（並列更新の競合）が現実の問題になる。結果を記入し、失敗した場合は ADR 0001 に追記する。
 - 結果: 連続 [ 回数 ] ／ 別経路 [ あり / なし ] ／ 並列 [ 本数 / 成功本数 ] ／ エラー [ なし / あり: ] ／ 判定 [ OK / NG / 要対応 ] ／ メモ:
+- 2026-10-29 の観測(ADR 0001 の未検証 5、検証用 Worker): 02:57 認可 → 03:11〜03:56 に `/token` 十数回(すべて 200)→ 03:56:06 の `/token` の MCP トークンで 03:57:00 から全ツールが HTTP 401 → 03:58 ごろの `/token` の後に回復。KV が古い `props` を返したのなら保存期限は 03:57 のままで 03:56:06 にも Backlog を更新したはずなので、**KV の結果整合だけでは説明できない**(V03 の寿命の食い違いの方が疑わしい)。
+- 対策後の確認: Backlog が 401 を返すと `backlog_unauthorized`(`stale_marked: true`)が出て、直後の `/token` で `token_exchange` が `stale_marker: true, refreshed: true` になること。`stale_marker: false` のまま 401 が続くなら、`/mcp` と `/token` が別 colo で印が伝播していない(数十秒で回復するはず)。
 
 ### V03 Backlog のアクセストークンの実際の `expires_in`
 
@@ -79,7 +83,10 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 目的: 約 1 時間と想定している Backlog の `expires_in` の実値。MCP のアクセストークンの寿命(30 分)の前提。
 - 手順: V01 の手順 3 で出る `expires_in` を記録する。`verify:oauth` が出す `expires_in` は MCP 側(30 分以下)なので区別する。
 - 期待結果: 3600 秒前後。MCP の 30 分より十分長い。短い(30 分以下)場合は `src/auth/token-exchange.ts` の `MCP_ACCESS_TOKEN_TTL_SECONDS` を見直す。
-- 結果: Backlog `expires_in` = [ ] 秒 ／ MCP `expires_in` = [ ] 秒 ／ 判定 [ OK / NG ] ／ メモ:
+- 結果: Backlog `expires_in` = [ 初回(コード交換): 未観測(失効後の更新は 3599。寿命は約 1 時間) ／ 有効期限内の更新: **残り寿命(残り秒数)**。04:29 の更新で `expires_in: 1755`(失効は 04:58 ごろ) ] ／ MCP `expires_in` = [ 1800 以下(ADR 0014 の式) ] ／ 判定 [ 要対応 → 対応済み(ADR 0014) ] ／ メモ: 寿命は約 1 時間(02:57 取得 → 03:57 に 401)。期限内の更新は期限を延ばさない。
+- 運用中のログでも確認できる: `backlog_token` の `expires_in`(コード交換と更新の両方)。**応答の `expires_in` と実際の寿命が一致するか**も確認する: `backlog_unauthorized` の `backlog_remaining_seconds` が正(保存期限より前に 401)なら一致していない。
+- 2026-10-29 の観測(ADR 0001 の未検証 5): 02:57 に取得したトークンが 03:57 に 401(寿命は約 1 時間で想定どおり)。一方で 03:26〜03:56 のどこかで行われたはずの更新が実際の寿命を延ばさなかった疑いがある。V01 の手順 3 で、`T1` と `T2` の `access_token` が同じか(`[ "$(echo "$T1" | jq -r .access_token)" = "$(echo "$T2" | jq -r .access_token)" ] && echo 同じ`)も記録する。
+- 結果(追記): 更新でアクセストークンが [ **同じ**(有効期限内の更新。04:29 の `token_exchange` が `access_token_changed: false`) ／ 失効後の更新: **新しいトークン**(`access_token_changed: true`、`expires_in: 3599`、ローテーションなし)。2026-10-29 05:00 の検証用 Worker のログ: `backlog_token` `{"grant_type":"refresh_token","expires_in":3599,"refresh_token_rotated":false}`、`token_exchange` `{"backlog_remaining_seconds":-104,"needs_refresh":true,"refreshed":true,"access_token_changed":true,"ttl_basis":"new_token","access_token_ttl":1800}` ] ／ メモ: これを受けて、Backlog の更新は保存期限を過ぎたとき・stale 印があるときだけにし、MCP の寿命を Backlog の残り + 5 秒にした(ADR 0014)。
 
 ### V04 Backlog の `redirect_uri` 検証と client_secret のフォーム送信
 
