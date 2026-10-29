@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { issueList } from "../../src/mcp/tools/issue";
 import { callTool, expectTool } from "../helpers/tool-call";
 
 const issue = {
@@ -494,6 +495,163 @@ describe("issue_list", () => {
     const bad = await callTool("logbutler_issue_list", { updated_since: "2026-02-30" }, {});
     expect(bad.json.error.code).toBe("argument_error");
     expect(bad.json.error.message).toContain("updated_since");
+  });
+
+  describe("include_descendants(parent_issue_ids の子と孫をまとめて返す。ADR 0015)", () => {
+    const ids = (n: number, from: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: from + i }));
+    /** 子の収集(sort=created・order=asc・parentIssueId[] だけ)と最終の一覧を見分けて返す。 */
+    const respond = (
+      children: (call: { url: string }) => unknown[],
+      final: unknown = [{ id: 900 }],
+    ) => ({
+      "GET /issues": (call: { url: string }) =>
+        new URL(call.url).searchParams.get("sort") === "created" &&
+        new URL(call.url).searchParams.get("order") === "asc"
+          ? children(call)
+          : final,
+    });
+
+    it("子の ID を集め、親 ∪ 子の parentIssueId[] で最後に 1 回だけ一覧を取る(出力は最後の一覧)", async () => {
+      const run = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: "100,200", include_descendants: true },
+        respond(() => [{ id: 101 }, { id: 102 }], [{ id: 1000 }, { id: 2000 }]),
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls).toEqual([
+        "GET /issues?count=100&order=asc&parentIssueId[]=100&parentIssueId[]=200&sort=created",
+        "GET /issues?parentIssueId[]=100&parentIssueId[]=200&parentIssueId[]=101&parentIssueId[]=102",
+      ]);
+      expect(run.json).toEqual([{ id: 1000 }, { id: 2000 }]);
+    });
+
+    it("利用者のフィルタ・count・offset・sort は最後の一覧にだけ付く(子の収集には付かない)", async () => {
+      const run = await callTool(
+        "logbutler_issue_list",
+        {
+          parent_issue_ids: "100",
+          include_descendants: true,
+          keyword: "バグ",
+          status_id: "1,2",
+          count: 50,
+          offset: 10,
+          sort: "updated",
+          order: "desc",
+        },
+        respond(() => [{ id: 101 }]),
+      );
+      expect(run.calls).toEqual([
+        "GET /issues?count=100&order=asc&parentIssueId[]=100&sort=created",
+        "GET /issues?count=50&keyword=バグ&offset=10&order=desc&parentIssueId[]=100&parentIssueId[]=101&sort=updated&statusId[]=1&statusId[]=2",
+      ]);
+    });
+
+    it("子がいなければ親だけで最後の一覧を取る。親と重複する ID は足さない", async () => {
+      const none = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: "100", include_descendants: true },
+        respond(() => []),
+      );
+      expect(none.calls.at(-1)).toBe("GET /issues?parentIssueId[]=100");
+      const dup = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: "100,101", include_descendants: true },
+        respond(() => [{ id: 101 }, { id: 102 }]),
+      );
+      expect(dup.calls.at(-1)).toBe(
+        "GET /issues?parentIssueId[]=100&parentIssueId[]=101&parentIssueId[]=102",
+      );
+    });
+
+    it("子が 100 件を超えれば次のページも取る(offset 方式)", async () => {
+      const run = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: "1", include_descendants: true },
+        respond((call) =>
+          new URL(call.url).searchParams.get("offset") === "100" ? ids(5, 1100) : ids(100, 1000),
+        ),
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls.slice(0, 2)).toEqual([
+        "GET /issues?count=100&order=asc&parentIssueId[]=1&sort=created",
+        "GET /issues?count=100&offset=100&order=asc&parentIssueId[]=1&sort=created",
+      ]);
+      expect(
+        new URL(run.recorded[2]?.url ?? "").searchParams.getAll("parentIssueId[]"),
+      ).toHaveLength(106);
+    });
+
+    it("親と子の合計が 200 を超えるときは argument_error(切り詰めない)。最後の一覧は取らない", async () => {
+      // 親 1 + 子 200 = 201 > 200。1 ページ目 100 + 2 ページ目 100 で上限に達した時点で止める
+      const run = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: "1", include_descendants: true },
+        respond((call) =>
+          new URL(call.url).searchParams.get("offset") === "100" ? ids(100, 1100) : ids(100, 1000),
+        ),
+      );
+      expect(run.isError).toBe(true);
+      expect(run.json.error.code).toBe("argument_error");
+      expect(run.json.error.retryable).toBe(false);
+      expect(run.json.error.message).toContain("200");
+      expect(run.json.error.message).toContain("parent_issue_ids");
+      expect(run.calls).toHaveLength(2);
+    });
+
+    it("親だけで 200 個を超えるなら、Backlog を呼ぶ前に argument_error", async () => {
+      const parents = Array.from({ length: 201 }, (_, i) => i + 1).join(",");
+      const run = await callTool(
+        "logbutler_issue_list",
+        { parent_issue_ids: parents, include_descendants: true },
+        {},
+      );
+      expect(run.json.error.code).toBe("argument_error");
+      expect(run.calls).toEqual([]);
+    });
+
+    it("parent_issue_ids がないのに true なら argument_error(Backlog を呼ばない)", async () => {
+      for (const args of [
+        { include_descendants: true },
+        { include_descendants: true, parent_issue_ids: "" },
+      ]) {
+        const run = await callTool("logbutler_issue_list", args, {});
+        expect(run.json.error.code).toBe("argument_error");
+        expect(run.json.error.message).toContain("parent_issue_ids");
+        expect(run.calls).toEqual([]);
+      }
+    });
+
+    it("false(既定)なら従来どおり parentIssueId[] で 1 回だけ(直下の子だけ)", async () => {
+      await expectTool({
+        tool: "logbutler_issue_list",
+        args: { parent_issue_ids: "100", include_descendants: false },
+        respond: { "GET /issues": [] },
+        calls: ["GET /issues?parentIssueId[]=100"],
+      });
+    });
+
+    it("status_id=not-closed で未完了の状態がなければ、子の収集もしない", async () => {
+      const run = await callTool(
+        "logbutler_issue_list",
+        {
+          parent_issue_ids: "100",
+          include_descendants: true,
+          project_key: "PROJ",
+          status_id: "not-closed",
+        },
+        {
+          "GET /projects/PROJ": { id: 10 },
+          "GET /projects/PROJ/statuses": [{ id: 4, name: "完了" }],
+        },
+      );
+      expect(run.json).toEqual([]);
+      expect(run.calls).not.toContain("GET /issues");
+    });
+
+    it("maxApiCalls は 52 = 従来の既定 50(プロジェクト・担当者・状態の解決と最後の一覧) + 子の収集 2 ページ(合計 200 ID で打ち切るため 3 ページ目はない)", () => {
+      expect(issueList.maxApiCalls).toBe(52);
+    });
   });
 
   describe("due_date / start_date(基準タイムゾーンの「今日」)", () => {

@@ -248,3 +248,71 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("E2E 10b: 親子課題(3 階層目の設定の有効・無効。ADR 0015)", () => {
+  it("issue_update: 親子関係の制約違反(HTTP 400・code=7)は argument_error のエンベロープで、元のキーと確認手段が入る", async () => {
+    for (const n of [3, 5, 6]) {
+      const { token } = await loggedIn({
+        [`PATCH ${API}/issues/PROJ-5`]: () =>
+          jsonResponse(
+            { errors: [{ message: `err.editIssue.parentChildIssue.${n}`, code: 7 }] },
+            400,
+          ),
+      });
+      const rpc = await readRpc(
+        await call(token, "logbutler_issue_update", { issue_key: "PROJ-5", parent_issue_id: 9 }),
+      );
+      expect(rpc.result?.isError).toBe(true);
+      const body = JSON.parse(firstText(rpc));
+      expect(body.error.code).toBe("argument_error");
+      expect(body.error.retryable).toBe(false);
+      expect(body.error.message).toContain(`err.editIssue.parentChildIssue.${n}`);
+      expect(body.error.message).toContain("grandchildIssueEnabled");
+    }
+  });
+
+  it("issue_update: engagement を指定しても、孫課題の親は付け替えない(祖先に案件の親課題がいる)", async () => {
+    const yaml =
+      "schema_version: 1\nproject:\n  key: PROJ\nengagements:\n  - name: 顧客A\n    lead: 山田\n    initiative: 運用保守\n";
+    const rule = {
+      id: 100,
+      issueKey: "PROJ-1",
+      issueType: { name: "規約" },
+      description: `\`\`\`yaml\n${yaml}\`\`\`\n`,
+    };
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/projects/PROJ`]: () => jsonResponse({ id: 10, projectKey: "PROJ" }),
+      [`GET ${API}/projects/PROJ/issueTypes`]: () =>
+        jsonResponse([
+          { id: 10, name: "規約" },
+          { id: 11, name: "案件" },
+        ]),
+      [`GET ${API}/issues`]: (c) =>
+        jsonResponse(
+          new URL(c.url).searchParams.get("issueTypeId[]") === "10"
+            ? [rule]
+            : [{ id: 101, summary: "[案件] 顧客A", issueType: { name: "案件" } }],
+        ),
+      [`GET ${API}/projects/PROJ/categories`]: () => jsonResponse([{ id: 20, name: "顧客A" }]),
+      [`GET ${API}/issues/PROJ-7`]: () =>
+        jsonResponse({ id: 7, issueKey: "PROJ-7", parentIssueId: 50 }),
+      [`GET ${API}/issues/50`]: () =>
+        jsonResponse({ id: 50, issueKey: "PROJ-3", parentIssueId: 101 }),
+      [`PATCH ${API}/issues/PROJ-7`]: () => jsonResponse({ id: 7, issueKey: "PROJ-7" }),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_update", { issue_key: "PROJ-7", engagement: "顧客A" }),
+    );
+    expect(rpc.result?.isError).toBeFalsy();
+    const patch = calls.find((c) => c.method === "PATCH");
+    const form = new URLSearchParams(patch?.body);
+    expect(form.getAll("categoryId[]")).toEqual(["20"]);
+    expect(form.has("parentIssueId")).toBe(false);
+    // 直列: 対象 → 親 → PATCH の順に、祖先をたどってから更新する
+    expect(paths(calls).slice(-3)).toEqual([
+      "GET /issues/PROJ-7",
+      "GET /issues/50",
+      "PATCH /issues/PROJ-7",
+    ]);
+  });
+});

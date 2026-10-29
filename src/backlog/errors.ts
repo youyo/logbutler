@@ -44,10 +44,39 @@ export class BacklogApiError extends LogbutlerError {
     readonly status: number,
     detail: BacklogApiErrorDetail = {},
   ) {
-    super(errorCodeForStatus(status), describe(status, detail), isRetryableStatus(status));
+    const parentChild = parentChildMessage(status, detail);
+    super(
+      parentChild ? "argument_error" : errorCodeForStatus(status),
+      parentChild ?? describe(status, detail),
+      parentChild ? false : isRetryableStatus(status),
+    );
     this.backlogCode = detail.backlogCode;
     this.backlogMessage = detail.backlogMessage;
   }
+}
+
+const PARENT_CHILD_KEY = /^err\.editIssue\.parentChildIssue\.(\d+)$/;
+const GRANDCHILD_HINT =
+  "プロジェクトの設定は logbutler_project_get の grandchildIssueEnabled で確認できます";
+
+/** 親子関係の制約違反で、Backlog の番号(N)ごとの理由。実環境で確認した番号だけ(ADR 0015)。 */
+const PARENT_CHILD_REASONS: Record<string, string> = {
+  "1": "自分自身を親課題にはできません",
+  "3": `このプロジェクトでは「親子課題に 3 階層目を使用する」が無効なため、子課題を親課題にできません(${GRANDCHILD_HINT})`,
+  "5": `このプロジェクトでは「親子課題に 3 階層目を使用する」が無効なため、子を持つ課題を子課題にできません(${GRANDCHILD_HINT})`,
+  "6": `親子課題は 3 階層までです。この操作では 4 階層目になってしまいます(${GRANDCHILD_HINT})`,
+};
+
+/**
+ * 親子関係の制約違反(HTTP 400・code=7・`err.editIssue.parentChildIssue.N`)は、入力の組み合わせの誤りなので
+ * argument_error(再試行不可)にし、理由と元のキーを日本語で伝える。それ以外は null(ADR 0015)。
+ */
+function parentChildMessage(status: number, d: BacklogApiErrorDetail): string | null {
+  if (status !== 400 || d.backlogCode !== 7 || d.backlogMessage === undefined) return null;
+  const m = PARENT_CHILD_KEY.exec(d.backlogMessage);
+  if (!m) return null;
+  const reason = PARENT_CHILD_REASONS[m[1] as string] ?? "親子関係の制約に違反しました";
+  return `${reason} (Backlog: ${d.backlogMessage})`;
 }
 
 function describe(status: number, d: BacklogApiErrorDetail): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issueCreate } from "../../src/mcp/tools/issue-write";
+import { issueCreate, issueUpdate } from "../../src/mcp/tools/issue-write";
 import { jsonResponse } from "../helpers/mock-fetch";
 import { callTool, formPairs } from "../helpers/tool-call";
 
@@ -434,6 +434,8 @@ describe("issue_update", () => {
           ? [rule]
           : [{ id: 101, summary: "[案件] 顧客A", issueType: { name: "案件" } }],
       "GET /projects/PROJ/categories": [{ id: 20, name: "顧客A" }],
+      // 親を付け替えるか決めるために、対象の課題とその親をたどる(親なしの課題が既定)
+      "GET /issues/PROJ-5": { id: 5, issueKey: "PROJ-5", parentIssueId: null },
       "PATCH /issues/PROJ-5": updated,
       ...extra,
     });
@@ -461,6 +463,108 @@ describe("issue_update", () => {
       expect(run.isError, run.text).toBe(false);
       expect(run.calls[0]).toBe("GET /issues/123");
       expect(run.calls.at(-1)).toBe("PATCH /issues/123");
+    });
+
+    describe("祖先に案件の親課題がいるときは親を変えない(孫課題の構造を崩さない。ADR 0015)", () => {
+      const noParentField = (run: { recorded: { body?: string }[] }) =>
+        formPairs(run.recorded.at(-1) as never);
+
+      it("対象が案件の親課題そのものなら、親を設定しない(自分自身を親にすると parentChildIssue.1)。カテゴリは設定する", async () => {
+        const run = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A" },
+          respond({ "GET /issues/PROJ-5": { id: 101, issueKey: "PROJ-5", parentIssueId: null } }),
+        );
+        expect(run.isError, run.text).toBe(false);
+        expect(noParentField(run)).toEqual(["categoryId[]=20"]);
+        expect(run.calls.at(-2)).toBe("GET /issues/PROJ-5");
+        expect(run.calls.at(-1)).toBe("PATCH /issues/PROJ-5");
+      });
+
+      it("親がすでに案件の親課題なら、親を変えない(親の GET はしない)", async () => {
+        const run = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A" },
+          respond({ "GET /issues/PROJ-5": { id: 5, issueKey: "PROJ-5", parentIssueId: 101 } }),
+        );
+        expect(run.isError, run.text).toBe(false);
+        expect(noParentField(run)).toEqual(["categoryId[]=20"]);
+        expect(run.calls.filter((c) => c.startsWith("GET /issues/"))).toEqual([
+          "GET /issues/PROJ-5",
+        ]);
+      });
+
+      it("親の親が案件の親課題(孫課題)なら、親を変えない。親を GET して確かめる", async () => {
+        const run = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A" },
+          respond({
+            "GET /issues/PROJ-5": { id: 5, issueKey: "PROJ-5", parentIssueId: 50 },
+            "GET /issues/50": { id: 50, issueKey: "PROJ-3", parentIssueId: 101 },
+          }),
+        );
+        expect(run.isError, run.text).toBe(false);
+        expect(noParentField(run)).toEqual(["categoryId[]=20"]);
+        expect(run.calls.slice(-3)).toEqual([
+          "GET /issues/PROJ-5",
+          "GET /issues/50",
+          "PATCH /issues/PROJ-5",
+        ]);
+      });
+
+      it("祖先に案件の親課題がいなければ従来どおり案件の親課題を親にする(親なし・別の親)", async () => {
+        const noParent = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A" },
+          respond(),
+        );
+        expect(noParentField(noParent)).toEqual(["categoryId[]=20", "parentIssueId=101"]);
+        expect(noParent.calls.filter((c) => c.startsWith("GET /issues/"))).toEqual([
+          "GET /issues/PROJ-5",
+        ]);
+
+        const otherParent = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A" },
+          respond({
+            "GET /issues/PROJ-5": { id: 5, issueKey: "PROJ-5", parentIssueId: 50 },
+            "GET /issues/50": { id: 50, issueKey: "PROJ-3", parentIssueId: null },
+          }),
+        );
+        expect(noParentField(otherParent)).toEqual(["categoryId[]=20", "parentIssueId=101"]);
+        expect(otherParent.calls.filter((c) => c.startsWith("GET /issues/"))).toEqual([
+          "GET /issues/PROJ-5",
+          "GET /issues/50",
+        ]);
+      });
+
+      it("明示した parent_issue_id が優先で、祖先は調べない", async () => {
+        const run = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "PROJ-5", engagement: "顧客A", parent_issue_id: 77 },
+          respond(),
+        );
+        expect(noParentField(run)).toEqual(["categoryId[]=20", "parentIssueId=77"]);
+        expect(run.calls).not.toContain("GET /issues/PROJ-5");
+      });
+
+      it("数値の課題 ID でも課題の GET は 1 回(課題キーの解決と祖先の確認で共有)", async () => {
+        const run = await callTool(
+          "logbutler_issue_update",
+          { issue_key: "123", engagement: "顧客A" },
+          respond({
+            "GET /issues/123": { id: 123, issueKey: "PROJ-5", parentIssueId: 101 },
+            "PATCH /issues/123": updated,
+          }),
+        );
+        expect(run.isError, run.text).toBe(false);
+        expect(run.calls.filter((c) => c === "GET /issues/123")).toHaveLength(1);
+        expect(noParentField(run)).toEqual(["categoryId[]=20"]);
+      });
+
+      it("maxApiCalls は 27 = 対象の課題 1 + 案件の解決 23(GetProject 1 + 規約(課題種別 1 + 10 ページ) + カテゴリ 1 + 案件の親課題 10 ページ) + 親の課題 1 + PATCH 1 + 変更なしの読み戻し 1", () => {
+        expect(issueUpdate.maxApiCalls).toBe(27);
+      });
     });
 
     it("明示した parent_issue_id=0 は上書きしない（解除のまま）", async () => {

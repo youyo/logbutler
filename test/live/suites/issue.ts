@@ -1,6 +1,6 @@
 /** 課題の作成・更新・コメント・関連・添付と、読み戻し。スイート自身が作った課題に対してだけ書き込む。 */
 import { describe, expect, it } from "vitest";
-import { created, need, pollFor, todayTokyo, ymd } from "../helpers/issues";
+import { created, type LiveIssue, need, pollFor, todayTokyo, ymd } from "../helpers/issues";
 import { errorOf, MARK } from "../helpers/live";
 import { world } from "../helpers/world";
 
@@ -625,6 +625,140 @@ export function issueSuite(): void {
           }),
         ),
       ).not.toBeNull();
+    });
+  });
+
+  // 「親子課題に 3 階層目を使用する」(grandchildIssueEnabled)の有効・無効の両方で、アサーションが走る(skip しない)。
+  // 設定値は読むだけで、書き換える API は呼ばない。課題はスイート自身が作る(名前に [live <時刻>] を付ける。ADR 0015)。
+  describe("課題: 親子課題(3 階層目の設定に応じて)", () => {
+    const family: { enabled?: boolean; root?: LiveIssue; kid?: LiveIssue; grandkid?: LiveIssue } =
+      {};
+    const mk = async (label: string, parentId?: number) => {
+      const { client, config, issueTypeId, priorityIds } = world();
+      return client.call("logbutler_issue_create", {
+        project_key: config.projectKey,
+        summary: summaryOf(label),
+        issue_type_id: issueTypeId,
+        priority_id: priorityIds[0],
+        ...(parentId === undefined ? {} : { parent_issue_id: parentId }),
+      });
+    };
+    const keysOf = (list: { issueKey: string }[]) => list.map((i) => i.issueKey).sort();
+
+    it("logbutler_project_get: grandchildIssueEnabled(真偽値)で設定を読み、親と子を作る(どちらの設定でも作れる)", async () => {
+      const { client, config } = world();
+      const project = await client.ok("logbutler_project_get", { project_key: config.projectKey });
+      expect(typeof project.grandchildIssueEnabled).toBe("boolean");
+      family.enabled = project.grandchildIssueEnabled;
+
+      const root = await mk("family root");
+      expect(root.isError, root.text.slice(0, 300)).toBe(false);
+      created.log.push(root.data.issueKey);
+      family.root = { id: root.data.id, key: root.data.issueKey, summary: root.data.summary };
+      const kid = await mk("family kid", root.data.id);
+      expect(kid.isError, kid.text.slice(0, 300)).toBe(false);
+      created.log.push(kid.data.issueKey);
+      expect(kid.data.parentIssueId).toBe(root.data.id);
+      family.kid = { id: kid.data.id, key: kid.data.issueKey, summary: kid.data.summary };
+    });
+
+    it("孫課題: 有効なら作れて、4 階層目は argument_error。無効なら孫課題の作成が argument_error(理由と確認手段つき)", async () => {
+      const { client } = world();
+      const kid = need(family.kid, "family kid");
+      const grandkid = await mk("family grandkid", kid.id);
+      if (family.enabled) {
+        expect(grandkid.isError, grandkid.text.slice(0, 300)).toBe(false);
+        created.log.push(grandkid.data.issueKey);
+        expect(grandkid.data.parentIssueId).toBe(kid.id);
+        family.grandkid = {
+          id: grandkid.data.id,
+          key: grandkid.data.issueKey,
+          summary: grandkid.data.summary,
+        };
+        // 4 階層目(作成)
+        const great = await mk("family great-grandkid", grandkid.data.id);
+        const e = errorOf(great);
+        expect(e?.code, great.text.slice(0, 300)).toBe("argument_error");
+        expect(e?.retryable).toBe(false);
+        expect(e?.message).toContain("err.editIssue.parentChildIssue.6");
+        expect(e?.message).toContain("grandchildIssueEnabled");
+        // 4 階層目(付け替え): 子を持つ kid の下に、別の子を持つ課題を移すのも同じ
+        const other = await mk("family other root");
+        expect(other.isError, other.text.slice(0, 300)).toBe(false);
+        created.log.push(other.data.issueKey);
+        const otherKid = await mk("family other kid", other.data.id);
+        expect(otherKid.isError, otherKid.text.slice(0, 300)).toBe(false);
+        created.log.push(otherKid.data.issueKey);
+        const moved = await client.call("logbutler_issue_update", {
+          issue_key: other.data.issueKey,
+          parent_issue_id: grandkid.data.id,
+        });
+        expect(errorOf(moved)?.code, moved.text.slice(0, 300)).toBe("argument_error");
+      } else {
+        const e = errorOf(grandkid);
+        expect(e?.code, grandkid.text.slice(0, 300)).toBe("argument_error");
+        expect(e?.retryable).toBe(false);
+        expect(e?.message).toContain("err.editIssue.parentChildIssue.3");
+        expect(e?.message).toContain("grandchildIssueEnabled");
+        // 子を持つ課題を誰かの子にする(.5)
+        const root = need(family.root, "family root");
+        const other = await mk("family other root");
+        expect(other.isError, other.text.slice(0, 300)).toBe(false);
+        created.log.push(other.data.issueKey);
+        const moved = await client.call("logbutler_issue_update", {
+          issue_key: root.key,
+          parent_issue_id: other.data.id,
+        });
+        const e5 = errorOf(moved);
+        expect(e5?.code, moved.text.slice(0, 300)).toBe("argument_error");
+        expect(e5?.message).toContain("err.editIssue.parentChildIssue.5");
+      }
+    });
+
+    it("自分自身を親にすると argument_error(設定によらず)", async () => {
+      const { client } = world();
+      const root = need(family.root, "family root");
+      const r = await client.call("logbutler_issue_update", {
+        issue_key: root.key,
+        parent_issue_id: root.id,
+      });
+      const e = errorOf(r);
+      expect(e?.code, r.text.slice(0, 300)).toBe("argument_error");
+      expect(e?.message).toContain("err.editIssue.parentChildIssue.1");
+    });
+
+    it("logbutler_issue_list: include_descendants なしは直下の子だけ。ありは、有効なら孫まで・無効なら子(設定によらず子孫を返す)", async () => {
+      const { client, config } = world();
+      const root = need(family.root, "family root");
+      const kid = need(family.kid, "family kid");
+      const direct = await client.ok("logbutler_issue_list", {
+        project_key: config.projectKey,
+        parent_issue_ids: String(root.id),
+      });
+      expect(keysOf(direct)).toEqual([kid.key]);
+
+      const all = await client.ok("logbutler_issue_list", {
+        project_key: config.projectKey,
+        parent_issue_ids: String(root.id),
+        include_descendants: true,
+      });
+      if (family.enabled) {
+        const grandkid = need(family.grandkid, "family grandkid");
+        expect(keysOf(all)).toEqual([kid.key, grandkid.key].sort());
+        // フィルタとページングは子と孫に一様にかかる(count=1 なら 1 件だけ)
+        const one = await client.ok("logbutler_issue_list", {
+          project_key: config.projectKey,
+          parent_issue_ids: String(root.id),
+          include_descendants: true,
+          count: 1,
+        });
+        expect(one).toHaveLength(1);
+      } else {
+        expect(keysOf(all)).toEqual([kid.key]);
+      }
+
+      const bad = await client.call("logbutler_issue_list", { include_descendants: true });
+      expect(errorOf(bad)?.code).toBe("argument_error");
     });
   });
 

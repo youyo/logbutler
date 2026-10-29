@@ -276,12 +276,13 @@ describe("tools/list スナップショット", () => {
     for (const c of result.changed) {
       const diffs = c.diffs
         .map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }))
-        // issue_list の status_id の説明文は ADR 0012 で変更(許容理由は baseline.ts)
+        // issue_list の status_id の説明文は ADR 0012 で変更、include_descendants の追加は ADR 0015(許容理由は baseline.ts)
         .filter(
           (d) =>
             !(
               c.name === "logbutler_issue_list" &&
-              d.path === "inputSchema.properties.status_id.description"
+              (d.path === "inputSchema.properties.status_id.description" ||
+                d.path === "inputSchema.properties.include_descendants")
             ),
         );
       expect(diffs, c.name).toEqual([
@@ -289,6 +290,24 @@ describe("tools/list スナップショット", () => {
         { path: "inputSchema.properties.timezone", expected: undefined },
       ]);
     }
+  });
+
+  it("許容した issue_update の差分は、engagement の説明文の変更だけ(ADR 0015)", async () => {
+    const result = compareWithBaseline(
+      await listTools(),
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: ["logbutler_issue_update"] },
+    );
+    expect(
+      result.changed.flatMap((c) => c.diffs.map((d) => `${c.name}:${d.field}.${d.path}`)),
+    ).toEqual(["logbutler_issue_update:inputSchema.properties.engagement.description"]);
+  });
+
+  it("許容した issue_list の include_descendants は、真偽値の任意引数(既定 false の説明つき)の追加", async () => {
+    const issueList = (await listTools()).find((t) => t.name === "logbutler_issue_list");
+    const props = (issueList?.inputSchema.properties ?? {}) as Record<string, { type?: string }>;
+    expect(props.include_descendants?.type).toBe("boolean");
+    expect(issueList?.inputSchema.required ?? []).not.toContain("include_descendants");
   });
 
   it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個を除く)にだけあり、差分は properties の追加だけ", async () => {
@@ -318,7 +337,8 @@ describe("tools/list スナップショット", () => {
         .filter(
           (p) =>
             p !== "inputSchema.properties.timezone" &&
-            p !== "inputSchema.properties.status_id.description",
+            p !== "inputSchema.properties.status_id.description" &&
+            p !== "inputSchema.properties.include_descendants",
         );
       expect(paths, c.name).toEqual(["inputSchema.properties.max_response_tokens"]);
     }

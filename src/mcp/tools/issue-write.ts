@@ -40,13 +40,13 @@ function parseListsAndDates(a: {
 }
 
 /** 課題キー（PROJ-123）から、プロジェクトキー（PROJ）を取る。数値の課題 ID なら課題を引いて決める。 */
-async function projectKeyOfIssue(client: BacklogClient, issueIdOrKey: string): Promise<string> {
+async function projectKeyOfIssue(
+  issueIdOrKey: string,
+  loadIssue: () => Promise<{ issueKey?: string }>,
+): Promise<string> {
   let key = issueIdOrKey;
   if (/^\d+$/.test(issueIdOrKey)) {
-    const issue = await client.request<{ issueKey?: string }>(
-      "GET",
-      `/issues/${seg(issueIdOrKey)}`,
-    );
+    const issue = await loadIssue();
     if (!issue?.issueKey) {
       throw new ArgumentError(`failed to resolve issue ID "${issueIdOrKey}": issue key is missing`);
     }
@@ -163,12 +163,39 @@ function isNoChangeUpdate(e: unknown): boolean {
   );
 }
 
+interface TargetIssue {
+  id?: number;
+  issueKey?: string;
+  parentIssueId?: number | null;
+}
+
+/**
+ * 対象の課題が案件の親課題そのもの、またはその子・孫(親・親の親が案件の親課題)なら true。
+ * 親を付け替えると孫が 2 階層目に引き上がって途中の課題との関係が切れ、自分自身を親にすると
+ * parentChildIssue.1 になるため、その場合は親を変えない(ADR 0015)。階層は最大 3 なので祖先は 2 段まで。
+ */
+async function hasEngagementAncestor(
+  client: BacklogClient,
+  target: TargetIssue,
+  engagementParentId: number,
+): Promise<boolean> {
+  if (target.id === engagementParentId) return true;
+  const parentId = target.parentIssueId;
+  if (!parentId) return false;
+  if (parentId === engagementParentId) return true;
+  const parent = await client.request<TargetIssue>("GET", `/issues/${seg(parentId)}`);
+  return parent?.parentIssueId === engagementParentId;
+}
+
 export const issueUpdate = defineTool({
   name: "logbutler_issue_update",
   title: "課題更新",
   description: "Update an existing issue",
   category: "WriteIdempotent",
   toolset: "issue",
+  // 対象の課題 1 + 案件の解決 23(GetProject 1 + 規約(課題種別 1 + 10 ページ) + カテゴリ 1 + 案件の親課題 10 ページ)
+  // + 親の課題 1 + PATCH 1 + 変更なしの読み戻し 1(ADR 0006・0015)
+  maxApiCalls: 27,
   inputSchema: z.object({
     issue_key: reqStr("Issue key (e.g. PROJECT-123)"),
     summary: optStr("New summary"),
@@ -179,7 +206,9 @@ export const issueUpdate = defineTool({
     issue_type_id: optInt("Issue type ID"),
     parent_issue_id: optInt("Parent issue ID (0 to remove parent)"),
     category_ids: optStr(SHARED_FIELDS.categories),
-    engagement: optStr(SHARED_FIELDS.engagement),
+    engagement: optStr(
+      `${SHARED_FIELDS.engagement}. When parent_issue_id is omitted the parent is left unchanged if the issue is the engagement's parent issue itself or already has it as an ancestor (parent or grandparent), so grandchild issues keep their structure`,
+    ),
     version_ids: optStr(SHARED_FIELDS.versions),
     milestone_ids: optStr(SHARED_FIELDS.milestones),
     notified_user_ids: optStr(SHARED_FIELDS.notified),
@@ -191,11 +220,21 @@ export const issueUpdate = defineTool({
     const v = parseListsAndDates(a);
     let categoryIds = v.categoryIds;
     let parentIssueId = a.parent_issue_id;
+    // 対象の課題の GET は、課題キーの解決と祖先の確認で共有する(1 回だけ)。
+    let target: Promise<TargetIssue> | undefined;
+    const loadTarget = () => {
+      target ??= client.request<TargetIssue>("GET", `/issues/${seg(a.issue_key)}`);
+      return target;
+    };
     if (a.engagement !== undefined) {
-      const projectKey = await projectKeyOfIssue(client, a.issue_key);
+      const projectKey = await projectKeyOfIssue(a.issue_key, loadTarget);
       const ref = await resolveEngagement(client, projectKey, a.engagement);
       if (a.category_ids === undefined) categoryIds = [ref.categoryId];
-      if (a.parent_issue_id === undefined && ref.parentIssueId !== 0) {
+      if (
+        a.parent_issue_id === undefined &&
+        ref.parentIssueId !== 0 &&
+        !(await hasEngagementAncestor(client, await loadTarget(), ref.parentIssueId))
+      ) {
         parentIssueId = ref.parentIssueId;
       }
     }

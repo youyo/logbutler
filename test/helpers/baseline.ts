@@ -219,6 +219,18 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
     reason:
       "status_id の説明文を変更。logvalet は not-closed を「ID 1,2,3」と説明していたが、Logbutler はプロジェクトの状態一覧から完了集合以外の状態(カスタム状態を含む)の ID を決めるので、説明を実態に合わせた(ADR 0012)。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.status_id.description だけに固定している。timezone / max_response_tokens の追加は別の許容項目。",
   },
+  {
+    tool: "logbutler_issue_list",
+    fields: ["inputSchema"],
+    reason:
+      "include_descendants 引数(任意・真偽値・既定 false)の追加。parent_issue_ids の子だけでなく孫まで返す(Backlog の parentIssueId[] は直下の子しか返さないため。ADR 0015)。logvalet の既定の挙動(直下の子だけ)は変わらない。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.include_descendants の追加だけに固定している。",
+  },
+  {
+    tool: "logbutler_issue_update",
+    fields: ["inputSchema"],
+    reason:
+      "engagement の説明文に、parent_issue_id を省略したときの親の扱い(対象が案件の親課題そのもの、または祖先に案件の親課題がいれば親を変えない)を追記。孫課題を 2 階層目に引き上げないための挙動で、説明を実態に合わせた(ADR 0015)。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.engagement.description だけに固定している。",
+  },
   ...[
     "logbutler_issue_list",
     "logbutler_my_tasks",

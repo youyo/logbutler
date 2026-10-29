@@ -1140,6 +1140,10 @@
           "description": "Due date filter: overdue, this-week, today, this-month, YYYY-MM-DD, or YYYY-MM-DD:YYYY-MM-DD",
           "type": "string"
         },
+        "include_descendants": {
+          "description": "If true (requires parent_issue_ids), also return the grandchild issues: the children of the given parents and their children. Default false returns only direct children. At most 200 issue IDs (parents + children) are supported; beyond that an argument_error is returned. The other filters, count, offset and sort apply to the combined result",
+          "type": "boolean"
+        },
         "keyword": {
           "description": "Keyword search against Backlog issues",
           "type": "string"
@@ -1425,7 +1429,7 @@
           "type": "string"
         },
         "engagement": {
-          "description": "Engagement name; sets both the engagement category and the parent issue",
+          "description": "Engagement name; sets both the engagement category and the parent issue. When parent_issue_id is omitted the parent is left unchanged if the issue is the engagement's parent issue itself or already has it as an ancestor (parent or grandparent), so grandchild issues keep their structure",
           "type": "string"
         },
         "issue_key": {

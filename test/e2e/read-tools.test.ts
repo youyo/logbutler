@@ -268,3 +268,49 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     );
   });
 });
+
+describe("E2E 9b: issue_list の include_descendants(子と孫をまとめて返す。ADR 0015)", () => {
+  it("子の ID を集めてから、親 ∪ 子の parentIssueId[] とフィルタで 1 回だけ一覧を取る", async () => {
+    const grandchildren = [
+      { id: 201, issueKey: "PROJ-201", parentIssueId: 101 },
+      { id: 101, issueKey: "PROJ-101", parentIssueId: 100 },
+    ];
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/issues`]: (c) =>
+        jsonResponse(
+          new URL(c.url).searchParams.get("sort") === "created"
+            ? [{ id: 101 }, { id: 102 }]
+            : grandchildren,
+        ),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_list", {
+        parent_issue_ids: "100",
+        include_descendants: true,
+        keyword: "x",
+        count: 30,
+      }),
+    );
+    expect(rpc.result?.isError).toBeFalsy();
+    expect(JSON.parse(firstText(rpc))).toEqual(grandchildren);
+
+    expect(calls).toHaveLength(2);
+    const collect = new URL(calls[0]?.url ?? "").searchParams;
+    expect(collect.getAll("parentIssueId[]")).toEqual(["100"]);
+    expect(collect.has("keyword")).toBe(false);
+    const last = new URL(calls[1]?.url ?? "").searchParams;
+    expect(last.getAll("parentIssueId[]")).toEqual(["100", "101", "102"]);
+    expect(last.get("keyword")).toBe("x");
+    expect(last.get("count")).toBe("30");
+  });
+
+  it("parent_issue_ids がなければ argument_error(Backlog を呼ばない)", async () => {
+    const { token, calls } = await loggedIn({});
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_list", { include_descendants: true }),
+    );
+    expect(rpc.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(rpc)).error.code).toBe("argument_error");
+    expect(calls).toHaveLength(0);
+  });
+});

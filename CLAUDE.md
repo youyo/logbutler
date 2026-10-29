@@ -29,6 +29,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - **デプロイは実行しない**: `mise run deploy` と `deploy:render` の実値での実行はユーザーが行う。作業では `mise run deploy:check`(ダミー値の dry-run)までにする。`wrangler secret put` や KV の作成も実行しない(手順は `docs/runbook.md`)。
 - **upstream / 下流モデル**(ADR 0011): このリポジトリは upstream で、`wrangler.jsonc` はローカル開発・テスト用のダミー値の共有設定(`env` ブロックなし)。アカウント固有の値(Worker 名・KV id・ドメイン・Backlog スペース・client id/secret)は**追跡ファイルに書かない**。デプロイは `mise run deploy:render` が `LOGBUTLER_*` 環境変数から gitignore 済みの `wrangler.deploy.jsonc` を生成し、`wrangler deploy -c` する(`mise.local.toml` の `[env]` / GitHub の Variables)。`wrangler.jsonc` のトップレベル(`compatibility_date` など)を変えれば下流に pull で届く。生成項目を足したら `scripts/render-wrangler-config/core.ts`・unit・E2E・runbook を更新する。
 - GitHub Actions は**コミット SHA で固定**する(`.github/workflows/ci.yml`)。更新時は `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で実在を確かめる。
+- **親子課題(3 階層目)**(ADR 0015): Backlog の `err.editIssue.parentChildIssue.N`(HTTP 400・code=7)は `BacklogApiError` の生成点(`src/backlog/errors.ts`)で `argument_error` に変換する。`issue_update` の `engagement` は、対象が案件の親課題そのもの・祖先(最大 2 段)に案件の親課題がいれば親を変えない。`issue_list` の `include_descendants` は子の ID を集めて「親 ∪ 子」で 1 回取る(親 + 子は 200 ID まで、超えたら `argument_error`)。プロジェクトの設定は `grandchildIssueEnabled`(`logbutler_project_get`)で、孫の有無はこの設定では決め打ちしない。
 - ツール名の接頭辞は `logbutler_`。
 - **状態・設定の ID を決め打ちしない**(ADR 0012)。テストも `meta_*` で取得するか、`project_settings` のツールでスイート自身が作る(実環境 E2E は名前に `[live <時刻>]` を付け、`afterAll` で必ず消す)。
 

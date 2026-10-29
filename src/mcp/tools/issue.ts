@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { MAX_STATUS_PROJECTS } from "../../analysis/budget";
 import { resolveNotClosedStatusIds } from "../../analysis/open-statuses";
+import type { BacklogClient } from "../../backlog/client";
+import { fetchByOffset } from "../../backlog/paging";
 import { ArgumentError } from "../../errors";
 import {
   boundedCount,
   dateRangeFor,
+  optBool,
   optInt,
   optStr,
   parseCsvInts,
@@ -33,12 +36,45 @@ export const issueGet = defineTool({
   handler: ({ issue_key }, { client }) => client.request("GET", `/issues/${seg(issue_key)}`),
 });
 
+/**
+ * include_descendants で `parentIssueId[]` に載せる ID(親 + 子)の上限。URL の長さを抑える
+ * (1 つ約 30 文字なので 200 個で約 6KB)。超えたら切り詰めずに argument_error(ADR 0015)。
+ */
+export const MAX_DESCENDANT_QUERY_IDS = 200;
+
+/** 子課題の ID を直列に集める。上限(親を含めて MAX_DESCENDANT_QUERY_IDS)を超えたら argument_error。 */
+async function collectChildIds(client: BacklogClient, parents: number[]): Promise<number[]> {
+  const capacity = MAX_DESCENDANT_QUERY_IDS - parents.length;
+  const { items } = await fetchByOffset<{ id: number }>(
+    async ({ offset, count }) =>
+      (await client.request<{ id: number }[]>("GET", "/issues", {
+        // 並びは作成順の昇順(offset でページを辿っても、追加で動きにくい順序)。利用者の sort は最後の一覧にだけ使う。
+        query: {
+          parentIssueId: parents,
+          sort: "created",
+          order: "asc",
+          count,
+          offset: offset > 0 ? offset : undefined,
+        },
+      })) ?? [],
+    { limit: capacity + 1 },
+  );
+  if (items.length > capacity) {
+    throw new ArgumentError(
+      `include_descendants: parent_issue_ids and their child issues exceed ${MAX_DESCENDANT_QUERY_IDS} issue IDs, so the grandchildren cannot be listed in one request. Narrow parent_issue_ids (fewer parents) and retry`,
+    );
+  }
+  return items.map((i) => i.id);
+}
+
 export const issueList = defineTool({
   name: "logbutler_issue_list",
   title: "課題一覧取得",
   description: "List issues with optional filters, including parent issue filtering",
   category: "ReadOnly",
   toolset: "issue",
+  // 従来の既定 50(プロジェクト・担当者・状態の解決と最後の一覧)+ 子の収集 2 ページ(親 + 子 ≦ 200 ID で打ち切るので 3 ページ目はない。ADR 0015)
+  maxApiCalls: 52,
   inputSchema: z.object({
     project_key: optStr("Filter by single project key (legacy; use project_keys for multiple)"),
     project_keys: optStr("Comma-separated project keys (e.g. PROJ1,PROJ2)"),
@@ -62,6 +98,9 @@ export const issueList = defineTool({
     parent_issue_ids: optStr(
       'Comma-separated parent issue IDs to filter child issues (e.g. "100,200")',
     ),
+    include_descendants: optBool(
+      `If true (requires parent_issue_ids), also return the grandchild issues: the children of the given parents and their children. Default false returns only direct children. At most ${MAX_DESCENDANT_QUERY_IDS} issue IDs (parents + children) are supported; beyond that an argument_error is returned. The other filters, count, offset and sort apply to the combined result`,
+    ),
     timezone: timezoneArg(),
   }),
   handler: async (a, { client, now, timezone }) => {
@@ -69,6 +108,14 @@ export const issueList = defineTool({
     const count = boundedCount("count", a.count);
     const status = a.status_id ? resolveStatusIds(a.status_id) : undefined;
     const parents = parseCsvInts("parent_issue_ids", a.parent_issue_ids);
+    if (a.include_descendants && !parents?.length) {
+      throw new ArgumentError("include_descendants requires parent_issue_ids");
+    }
+    if (a.include_descendants && (parents?.length ?? 0) > MAX_DESCENDANT_QUERY_IDS) {
+      throw new ArgumentError(
+        `include_descendants supports at most ${MAX_DESCENDANT_QUERY_IDS} parent_issue_ids, got ${parents?.length}`,
+      );
+    }
     const keys = [...(a.project_key ? [a.project_key] : []), ...parseCsvStrings(a.project_keys)];
     if (status === "not-closed" && new Set(keys).size > MAX_STATUS_PROJECTS) {
       throw new ArgumentError(
@@ -101,11 +148,19 @@ export const issueList = defineTool({
       statusIds = status;
     }
 
+    // 子孫まで返すときは、子の ID を集め、最後に「親 ∪ 子」を parentIssueId にして 1 回だけ一覧を取る。
+    // フィルタ・count・offset・sort は Backlog が子と孫に一様にかける(ADR 0015)。
+    let parentIds = parents ?? [];
+    if (a.include_descendants && parents) {
+      const childIds = await collectChildIds(client, parents);
+      parentIds = [...new Set([...parents, ...childIds])];
+    }
+
     return client.request("GET", "/issues", {
       query: {
         projectId: projectIds,
         assigneeId: assignee === undefined ? [] : [assignee],
-        parentIssueId: parents ?? [],
+        parentIssueId: parentIds,
         statusId: statusIds ?? [],
         keyword: a.keyword || undefined,
         dueDateSince: due?.since,
