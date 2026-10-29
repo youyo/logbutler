@@ -19,3 +19,5 @@ wrangler.deploy*.jsonc
 
 # claude mcp add --scope project が作る接続設定(検証用 Worker の URL などアカウント固有の値を含む。ADR 0011)
 .mcp.json
+# Codex の MCP 接続設定(.mcp.json と同じくアカウント固有の値を含む)
+.codex/
