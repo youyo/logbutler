@@ -15,6 +15,13 @@ function fail(message: string): never {
   throw new Error(`${message}\n${USAGE}`);
 }
 
+/** https、またはループバックのホストに限り http を許す。 */
+export function isAllowedUrl(url: URL): boolean {
+  const loopback =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  return url.protocol === "https:" || (url.protocol === "http:" && loopback);
+}
+
 export function parseArgs(argv: string[]): CliArgs {
   let mcpUrl: string | undefined;
   let refreshOnly = false;
@@ -43,8 +50,7 @@ export function parseArgs(argv: string[]): CliArgs {
   } catch {
     return fail(`URL として読めません: ${mcpUrl}`);
   }
-  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+  if (!isAllowedUrl(url)) {
     fail("URL は https である必要があります(開発用の localhost だけ http 可)");
   }
   if (url.pathname !== "/mcp") fail("URL のパスは /mcp にしてください(例 https://<domain>/mcp)");

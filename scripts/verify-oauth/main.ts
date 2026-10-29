@@ -3,16 +3,19 @@
 import { spawn } from "node:child_process";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "./args.ts";
+import { browserCommand } from "./browser.ts";
 import { formatReport, runVerification, type SavedState, type VerifyIo } from "./core.ts";
 import { startLoopbackReceiver } from "./loopback.ts";
 
 function openInBrowser(url: string): void {
-  const [cmd, args]: [string, string[]] =
-    process.platform === "darwin"
-      ? ["open", [url]]
-      : process.platform === "win32"
-        ? ["cmd", ["/c", "start", "", url]]
-        : ["xdg-open", [url]];
+  let command: [string, string[]];
+  try {
+    command = browserCommand(url, process.platform);
+  } catch {
+    console.log("(ブラウザを自動で開けませんでした。上の URL を手で開いてください)");
+    return;
+  }
+  const [cmd, args] = command;
   // 開けなくても URL は表示済み。手でブラウザに貼ってもらう。
   const child = spawn(cmd, args, { stdio: "ignore", detached: true });
   child.on("error", () =>
