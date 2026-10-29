@@ -261,6 +261,31 @@ describe("E2E: verify:oauth(実環境確認用 CLI)を Worker とモック Backl
     expect(h.requests.some((r) => new URL(r.url).pathname === "/token")).toBe(false);
   });
 
+  it.each([
+    ["別 origin", "https://evil.example/authorize&calc"],
+    ["http(非ループバック)", `${ORIGIN.replace(/^https:/, "http:")}/authorize`],
+    ["非 http(s) スキーム", "file:///etc/passwd"],
+  ])(
+    "AS メタデータの authorization_endpoint が%sなら、metadata で失敗しブラウザを開かない",
+    async (_label, endpoint) => {
+      await setupMocks();
+      const h = harness();
+      const inner = h.io.fetch;
+      h.io.fetch = async (input, init) => {
+        const res = await inner(input, init);
+        if (new URL(input).pathname.startsWith("/.well-known/oauth-authorization-server")) {
+          const body = (await res.json()) as Record<string, unknown>;
+          return jsonResponse({ ...body, authorization_endpoint: endpoint });
+        }
+        return res;
+      };
+      const report = await runVerification({ mcpUrl: MCP_URL, refreshOnly: false }, h.io);
+      expect(report.ok).toBe(false);
+      expect(step(report, "metadata")?.ok).toBe(false);
+      expect(h.openedUrls).toEqual([]);
+    },
+  );
+
   it("コールバックの state が違えば authorize で失敗し、/token へ進まない", async () => {
     await setupMocks();
     const h = harness({ tamper: (cb) => cb.searchParams.set("state", "forged-state") });

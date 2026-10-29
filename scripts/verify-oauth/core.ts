@@ -6,6 +6,7 @@
  *
  * トークンは出力しない(maskToken で先頭数文字だけ)。
  */
+import { isAllowedUrl } from "./args.ts";
 
 export interface CallbackReceiver {
   /** DCR に登録し、認可リクエストの redirect_uri に使う URL(http://127.0.0.1:<port>/callback)。 */
@@ -280,6 +281,22 @@ export async function runVerification(opts: VerifyOptions, io: VerifyIo): Promis
     for (const key of ["authorization_endpoint", "token_endpoint", "registration_endpoint"]) {
       if (typeof as[key] !== "string")
         throw new StepError(`認可サーバーのメタデータに ${key} がない`);
+      let endpoint: URL;
+      try {
+        endpoint = new URL(as[key] as string);
+      } catch {
+        throw new StepError(`認可サーバーのメタデータの ${key} が URL として読めない`);
+      }
+      if (!isAllowedUrl(endpoint)) {
+        throw new StepError(
+          `認可サーバーのメタデータの ${key} は https である必要がある(開発用のループバックだけ http 可)`,
+        );
+      }
+      if (endpoint.origin !== new URL(first).origin) {
+        throw new StepError(
+          `認可サーバーのメタデータの ${key} (${endpoint.origin}) が issuer (${first}) と違う origin`,
+        );
+      }
     }
     const methods = as.code_challenge_methods_supported;
     if (!Array.isArray(methods) || !methods.includes("S256")) {
