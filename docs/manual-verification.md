@@ -112,7 +112,7 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 目的: Claude(claude.ai のカスタムコネクタ / Claude Code)、Cursor、Portal などが送る DCR で登録できること(`application_type` の有無、`redirect_uris` の形、`scope` の有無)。
 - 手順: 使うクライアントごとに `$BASE/mcp` を追加して接続する。失敗したクライアントは、Workers Logs で `/register` の応答コードを見る。
 - 期待結果: 登録でき、ブラウザで Backlog のログイン → 接続完了、ツール一覧が見える。
-- 結果: クライアント別 [ 名前: OK/NG ] ／ メモ:
+- 結果: クライアント別 [ **Claude Code: OK** / 他は未実施 ] ／ メモ: 2026-10-29、Claude Code から `claude mcp add --scope project --transport http` で検証用 Worker の `/mcp` に直接接続(DCR の `client_id` は URL 形式ではない = DCR で登録。V07 の材料)。`/mcp` 認証 → Backlog の同意で接続でき、`logbutler_user_me` が自分(`id` <自分の Backlog ユーザー ID>)を返した。クエリ付き URL も同じ手順で接続できた: `?read_only=true` は書き込み系が一覧から消え、`?toolsets=issue,project,analysis&read_only=true` はその toolset の読み取りツールだけになった。DCR リクエストの中身(`application_type` など)は `wrangler tail` を回していなかったため未記録。
 
 ### V07 CIMD(Client ID Metadata Document)を有効にするか
 
@@ -218,7 +218,7 @@ Logbutler の前段に Cloudflare MCP Server Portals を置く場合だけ実施
 - 出典: 計画書 M07 の (b)、[ADR 0008](adr/0008-client-side-control-and-mcp-2026.md)(DCR)
 - 手順: 別々の 2 人のユーザー(または 2 つの Backlog アカウント)が、Portal の Connect から認可する。Workers Logs で `/register` のリクエストを見て、DCR の `redirect_uris` に Portal のコールバック `https://<portal-host>/servers-callback` が入っていること、`application_type` や `scope` の有無を記録する。各ユーザーで `logbutler_user_me` を呼ぶ。
 - 期待結果: 各ユーザーが自分の Backlog アカウントでログイン・同意でき、`user_me` が**それぞれ自分の** Backlog ユーザーを返す(他人の情報にならない)。DCR は 201 で成功する。
-- 結果: DCR の `redirect_uris` [ 未記録 ] ／ `application_type` [ 未記録 ] ／ `scope` [ 未記録 ] ／ 1 人目の `user_me.id` [ 未記録 ] ／ 2 人目 [ 未実施 ] ／ 判定 [ **一部 OK**(1 人のみ) ] ／ メモ: 2026-10-29、利用者 1 人(管理者と同じ人)が Claude Code から claude.ai のコネクタ経由で Portal(`<portal-host>`)に接続し直し、Logbutler のツールが見えることを確認した。DCR の中身は記録していない(認可時に `wrangler tail` を止めていた)。2 人目(別の Backlog アカウント)での確認は未実施。
+- 結果: DCR の `redirect_uris` [ 未記録 ] ／ `application_type` [ 未記録 ] ／ `scope` [ 未記録 ] ／ 1 人目の `user_me.id` [ **<自分の Backlog ユーザー ID>**(2026-10-29、Portal 経由で `logbutler_user_me` を呼んで確認。自分の Backlog ユーザー) ] ／ 2 人目 [ 未実施 ] ／ 判定 [ **一部 OK**(1 人のみ) ] ／ メモ: 2026-10-29、利用者 1 人(管理者と同じ人)が Claude Code から claude.ai のコネクタ経由で Portal(`<portal-host>`)に接続し直し、Logbutler のツールが見えることを確認した。DCR の中身は記録していない(認可時に `wrangler tail` を止めていた)。2 人目(別の Backlog アカウント)での確認は未実施。
 
 ### P3 Portal がクエリ付き URL(`?toolsets=...&read_only=true`)を保持するか
 

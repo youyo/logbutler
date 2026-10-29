@@ -45,6 +45,7 @@ MCP クライアント(Portal など)
 
 ## ドキュメント
 
+- 下流リポジトリのセットアップは、エージェント(Claude Code / Codex)に「下流のセットアップを手伝って」と頼むと、同梱のスキル(`.claude/skills/logbutler-setup/`)が手順を案内する
 - [デプロイと運用の手順書](docs/runbook.md)(Backlog の OAuth アプリ登録、KV・ドメイン・secrets・デプロイ、運用)
 - [実機確認リスト](docs/manual-verification.md)(実デプロイしていないため未検証の前提と、その確認手順・記入欄)
 

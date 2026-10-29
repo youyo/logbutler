@@ -3,6 +3,7 @@
 Logbutler(Backlog 用 Remote MCP サーバー)を、自分の Cloudflare アカウントと Backlog スペースで動かす手順。**下流の運用者**(このリポジトリ = upstream を元に、自分のリポジトリを作って運用する人)の視点で書く。
 **upstream の作業では実デプロイをしていない**。設計の理由は [ADR 0011](adr/0011-upstream-downstream-deploy.md)。
 デプロイ後の確認は [docs/manual-verification.md](manual-verification.md)。
+エージェント(Claude Code / Codex)に「下流のセットアップを手伝って」と頼むと、この手順書に沿って案内するスキル(`.claude/skills/logbutler-setup/`)が使われる。秘密値の投入とブラウザ操作は人間が行う。
 
 ## 全体像
 

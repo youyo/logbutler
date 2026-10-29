@@ -3,6 +3,8 @@
 Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)の作業規約。
 計画は `plans/`(ロードマップと各マイルストーン)、設計判断は `docs/adr/`。
 
+> **下流リポジトリ**(upstream を fork / ミラーした組織のリポジトリ)のセットアップ・デプロイでは、以下の「デプロイは実行しない」等の規約は適用しない(upstream の開発時の規約)。秘密値の扱い・追跡ファイルを編集しない・コミットや push はユーザーの指示があるときだけ、は下流でも変わらない。`.claude/skills/logbutler-setup/SKILL.md` に従う(Codex も同じパス。`.agents/skills/` からの symlink)。
+
 ## 絶対に守ること
 
 - **TDD**: 失敗するテストを先に書き、`mise run test:unit` / `mise run test:e2e` で期待どおりの理由で失敗するのを確認してから実装する。テストを弱める・skip・削除しない。バグ修正は再現テストが先。
@@ -50,6 +52,7 @@ scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oaut
 .github/workflows/ci.yml     lint / test / deploy:check(アクションは SHA 固定)
 .github/workflows/deploy.yml 下流のデプロイ(Variable LOGBUTLER_WORKER_NAME が空の upstream では飛ばす)
 scripts/render-wrangler-config/  wrangler.jsonc + LOGBUTLER_* → wrangler.deploy.jsonc(core.ts: JSONC 読み・検証・差し替え。main.ts: 入出力。Node 24 の型ストリップで直接実行)
+.claude/skills/logbutler-setup/SKILL.md  下流リポジトリのセットアップ案内スキル(`.agents/skills/` から symlink)
 docs/runbook.md  docs/manual-verification.md   デプロイ・運用の手順書と、未検証の前提の実機確認リスト(ADR の「未検証の前提」から V01〜 / P1〜 でリンクしている)
 src/analysis/open-statuses.ts   「未完了」の状態 ID をプロジェクトの状態一覧(完了集合以外)から決める(ADR 0012。状態 ID を決め打ちしない)
 src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)・activity-range.ts(期間つきのアクティビティ取得。maxId を必ず進める)・snippet.ts(コードポイント単位の抜粋)と、ツールごとの関数(digest 系は DigestEnvelope)
