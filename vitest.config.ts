@@ -9,6 +9,12 @@ const testBindings = {
   BACKLOG_CLIENT_SECRET: "test-backlog-client-secret",
 };
 
+// workerd のテストは、各ファイルの最初のテストで Worker の起動とモジュールの読み込みが走る。
+// ファイルを並列に流すと、その起動が CPU を取り合い、手元(18 コア)でも最初のテストが約 4.7 秒、
+// CPU の少ない CI(GitHub Actions ubuntu-latest。unit と e2e が同時に走る)では 5 秒の既定を超える。
+// 起動コストの揺れを吸収するための余裕で、個々のテストの重さの許容ではない(通常は各テスト 1 秒未満)。
+const WORKERD_TEST_TIMEOUT_MS = 30_000;
+
 function project(name: string, include: string) {
   return {
     plugins: [
@@ -17,7 +23,12 @@ function project(name: string, include: string) {
         miniflare: { bindings: testBindings },
       }),
     ],
-    test: { name, include: [include] },
+    test: {
+      name,
+      include: [include],
+      testTimeout: WORKERD_TEST_TIMEOUT_MS,
+      hookTimeout: WORKERD_TEST_TIMEOUT_MS,
+    },
   };
 }
 
