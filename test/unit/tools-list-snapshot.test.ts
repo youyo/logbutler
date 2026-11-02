@@ -334,6 +334,22 @@ describe("tools/list スナップショット", () => {
     expect(issueList?.inputSchema.required ?? []).not.toContain("detail");
   });
 
+  it("許容した issue_get の detail は、文字列の任意引数(full / summary。ADR 0017)の追加。差分は detail と max_response_tokens の追加だけ", async () => {
+    const tools = await listTools();
+    const issueGet = tools.find((t) => t.name === "logbutler_issue_get");
+    const props = (issueGet?.inputSchema.properties ?? {}) as Record<string, { type?: string }>;
+    expect(props.detail?.type).toBe("string");
+    expect(issueGet?.inputSchema.required ?? []).not.toContain("detail");
+    const result = compareWithBaseline(
+      tools,
+      fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
+      { only: ["logbutler_issue_get"] },
+    );
+    expect(
+      result.changed.flatMap((c) => c.diffs.map((d) => `${d.field}.${d.path}`)).sort(),
+    ).toEqual(["inputSchema.properties.detail", "inputSchema.properties.max_response_tokens"]);
+  });
+
   it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個を除く)にだけあり、差分は properties の追加だけ", async () => {
     const tools = await listTools();
     // 引数を持つツール = ReadOnly の annotation を持つツールからダウンロード系を除いたもの(M06 の 3 ツールを含む)

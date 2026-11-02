@@ -46,8 +46,8 @@ logvalet と同じく、必須でない取得の失敗(プロジェクト、課�
 | `project_health` | (1 + PAGES) + 規約(課題種別 1 + 規約課題 PAGES) + K = 11 + 11 + 50 | 72 | `tools-analysis-health.test.ts:308,312` |
 | `issue_context` | GetIssue 1 + コメント PAGES + ステータス 1 + 関連課題 1 | 13 | `tools-analysis-context.test.ts:225,228` |
 | `issue_triage_materials` | GetIssue 1 + (1 + PAGES) + コメント PAGES + 関連課題 1 | 23 | `tools-analysis-triage.test.ts:226,229` |
-| `my_tasks` | GetMyself 1 + プロジェクト一覧 1 + 状態一覧 S(= `MAX_STATUS_PROJECTS` = 100)+ overdue PAGES + upcoming PAGES + watching PAGES = 1 + 1 + 100 + 30(ADR 0012。**ADR 0016 で 20 → 100 に更新**。状態一覧は KV に 600 秒キャッシュするので、2 回目以降は通常これより少ない) | 132 | `tools-analysis-my-tasks.test.ts` / `status-cache.test.ts`(`maxApiCalls は 132` と上限まで続く最悪ケース) |
-| `issue_list`(ADR 0016) | GetProject P(≦ 100)+ GetMyself 1 + 状態一覧 S(= 100)+ 子の収集 2 + 一覧 1。キャッシュが空の最悪ケース | 204 | `tools-issue-activity.test.ts`(`maxApiCalls は 204`)/ `status-cache.test.ts`(最悪ケースが 204 回で通る) |
+| `my_tasks` | GetMyself 1 + プロジェクト一覧 1 + 状態一覧 S(= `MAX_STATUS_PROJECTS` = 200)+ overdue PAGES + upcoming PAGES + watching PAGES = 1 + 1 + 200 + 30(ADR 0012。**ADR 0016 で 20 → 100、ADR 0017 で 100 → 200 に更新**。状態一覧は KV に 600 秒キャッシュするので、2 回目以降は通常これより少ない) | 232 | `tools-analysis-my-tasks.test.ts` / `status-cache.test.ts`(`maxApiCalls は 232` と上限まで続く最悪ケース) |
+| `issue_list`(ADR 0016 / 0017) | 指定なし: プロジェクト一覧 1 + 状態一覧 S(= 200)+ GetMyself 1 + 子の収集 2 + 一覧 1 = 205。指定あり: GetProject P(≦ 100)+ GetMyself 1 + 状態一覧 P + 2 + 1 = 204。大きい方。キャッシュが空の最悪ケース(**ADR 0017 で 204 → 205**) | 205 | `tools-issue-activity.test.ts`(`maxApiCalls は 205`)/ `status-cache.test.ts`(指定なし 205 回・指定あり 204 回の最悪ケースが通る) |
 | `digest_daily` / `digest_weekly` | GetProject 1 + 課題 PAGES | 11 | `tools-analysis-digest-periodic.test.ts:246,250` |
 | `issue_timeline` | GetIssue 1 + コメント PAGES + アクティビティ `max_activity_pages`(≤ 10) | 21 | `tools-analysis-timeline.test.ts:320,323` |
 | `activity_stats` | (scope=user の "me": GetMyself 1) + アクティビティ PAGES | 11 | `tools-analysis-activity-stats.test.ts:150,153,171` |

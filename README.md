@@ -73,6 +73,10 @@ MCP クライアント(Portal など)
 | `notification` | 2 | `notification_list` `notification_count` |
 | `project_settings` | 12 | `category_add` `category_update` `category_delete` `version_add` `version_update` `version_delete` `status_add` `status_update` `status_delete` `custom_field_add` `custom_field_update` `custom_field_delete` |
 
+### 出力のキーの形式
+
+ツールの出力は、キーの形式が 2 通りある(logvalet と同じ混在。ADR 0004)。Backlog の生データ(`issue_get` や `issue_list` の `detail=full` など、Backlog の応答をそのまま返すもの)は **camelCase**(`issueKey`、`createdUser`)。Logbutler が加工した出力(分析系・`user_me`・`search`、`issue_get` / `issue_list` の `detail=summary`)は **snake_case**(`issue_key`、`project_key`)。形式を揃えたいときは、`detail=summary` を使う。
+
 ## 開発
 
 

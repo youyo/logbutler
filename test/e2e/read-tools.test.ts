@@ -132,6 +132,65 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
     expect(JSON.parse(firstText(bad)).error.code).toBe("argument_error");
   });
 
+  it("issue_get(detail=summary): OAuth 済みの /mcp で、ユーザーが名前だけの要約 + description 全文をエンベロープで返す。省略は生データ(ADR 0017)", async () => {
+    const raw = {
+      id: 7,
+      issueKey: "PROJ-7",
+      summary: "要約テスト",
+      description: "とても長い本文",
+      issueType: { id: 2, name: "バグ" },
+      status: { id: 1, name: "未対応" },
+      priority: { id: 3, name: "中" },
+      assignee: { id: 9, userId: "bob", name: "Bob", nulabAccount: { nulabId: "x", name: "Bob" } },
+      createdUser: { id: 1, userId: "alice", name: "Alice", nulabAccount: { nulabId: "y" } },
+      startDate: null,
+      dueDate: "2026-11-01T00:00:00Z",
+      parentIssueId: null,
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-02T00:00:00Z",
+    };
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/issues/PROJ-7`]: () => jsonResponse(raw),
+    });
+
+    const full = await readRpc(await call(token, "logbutler_issue_get", { issue_key: "PROJ-7" }));
+    expect(JSON.parse(firstText(full))).toEqual(raw);
+
+    const summary = await readRpc(
+      await call(token, "logbutler_issue_get", { issue_key: "PROJ-7", detail: "summary" }),
+    );
+    expect(summary.result?.isError, firstText(summary)).toBeFalsy();
+    const body = JSON.parse(firstText(summary));
+    expect(body).toMatchObject({ schema_version: "1", resource: "issue_get", warnings: [] });
+    expect(body.analysis).toEqual({
+      issue: {
+        id: 7,
+        issue_key: "PROJ-7",
+        project_key: "PROJ",
+        summary: "要約テスト",
+        issue_type: "バグ",
+        status: "未対応",
+        priority: "中",
+        assignee: "Bob",
+        start_date: null,
+        due_date: "2026-11-01T00:00:00Z",
+        parent_issue_id: null,
+        created: "2026-01-01T00:00:00Z",
+        updated: "2026-01-02T00:00:00Z",
+        description: "とても長い本文",
+      },
+    });
+    expect(firstText(summary)).not.toContain("nulabAccount");
+
+    const before = calls.length;
+    const bad = await readRpc(
+      await call(token, "logbutler_issue_get", { issue_key: "PROJ-7", detail: "tiny" }),
+    );
+    expect(bad.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(bad)).error.code).toBe("argument_error");
+    expect(calls).toHaveLength(before); // Backlog を呼ばない
+  });
+
   it("issue_list(not-closed・プロジェクト指定なし): 参加プロジェクトの状態一覧から、重複を除いた完了集合以外の ID を使う", async () => {
     const { token, calls } = await loggedIn({
       [`GET ${API}/projects`]: () =>

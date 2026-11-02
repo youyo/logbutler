@@ -1,5 +1,5 @@
 /**
- * 状態一覧の KV キャッシュ(ADR 0016 §1)。`GET /projects/:key/statuses` の `{id, name}` だけを、
+ * 状態一覧の KV キャッシュ(ADR 0016 §1。ADR 0017 で、書き込みを 20 件引くごとの途中 flush + 最後に更新)。`GET /projects/:key/statuses` の `{id, name}` だけを、
  * `OAUTH_KV` の `statuses:<backlogUserId>` に 1 ユーザー 1 値の JSON で置く(ADR 0005 と同じ namespace・接頭辞方式)。
  *
  * - 値はプロジェクトキー → `{ fetched_at(ミリ秒), statuses }`。鮮度は項目ごとに `fetched_at` で見る(KV の TTL だけに
@@ -13,6 +13,9 @@ import { seg } from "../mcp/args";
 
 /** キャッシュの鮮度(秒)。KV の expirationTtl にも使う。 */
 export const STATUS_CACHE_TTL_SECONDS = 600;
+
+/** Backlog から新しく引いたプロジェクトがこの件数たまるごとに、途中でも KV に書く(ADR 0017)。 */
+export const STATUS_CACHE_FLUSH_EVERY = 20;
 
 /** KVNamespace の、ここで使う部分。 */
 export interface StatusCacheKv {
@@ -71,9 +74,10 @@ function parseFresh(raw: string, nowMs: number): Map<string, Entry> {
 }
 
 /**
- * 1 回のツール呼び出しの間だけ使う状態一覧の取得器。KV の読み取りは最初の `get` で 1 回、
- * 書き込みは Backlog から引いたプロジェクトがあったときに `flush` で 1 回だけ。
- * `cache` が無ければ毎回 Backlog から引く(従来どおり)。
+ * 1 回のツール呼び出しの間だけ使う状態一覧の取得器。KV の読み取りは最初の `get` で 1 回。
+ * 書き込みは、Backlog から新しく引いたプロジェクトが `STATUS_CACHE_FLUSH_EVERY`(20)件たまるごと、
+ * と最後の `flush` で行う(ADR 0017。クライアントのタイムアウトで呼び出しが切られても、引けた分は次回に活きる)。
+ * 書き込みの回数は ⌈新規件数 / 20⌉ 以内。`cache` が無ければ毎回 Backlog から引く(従来どおり)。
  */
 export function createStatusLookup(
   client: BacklogClient,
@@ -82,6 +86,7 @@ export function createStatusLookup(
 ) {
   let entries: Map<string, Entry> | undefined;
   let dirty = false;
+  let pending = 0; // 前回の書き込み以降に Backlog から引いた件数
 
   const load = async (): Promise<Map<string, Entry>> => {
     if (entries) return entries;
@@ -96,6 +101,22 @@ export function createStatusLookup(
     return entries;
   };
 
+  /** 引き直した分があれば、鮮度の残っている項目と合わせて書く。失敗は無視する。 */
+  const flush = async (): Promise<void> => {
+    if (!cache || !dirty || !entries) return;
+    dirty = false;
+    pending = 0;
+    try {
+      await cache.kv.put(
+        statusCacheKey(cache.userId),
+        JSON.stringify(Object.fromEntries(entries)),
+        { expirationTtl: STATUS_CACHE_TTL_SECONDS },
+      );
+    } catch {
+      // キャッシュなしとして続ける
+    }
+  };
+
   return {
     /** GET /projects/:key/statuses(キャッシュにあって新しければ Backlog を呼ばない)。 */
     async get(projectKey: string): Promise<BacklogStatus[]> {
@@ -108,22 +129,11 @@ export function createStatusLookup(
       const statuses = fetched.map(({ id, name }) => ({ id, name }));
       map.set(projectKey, { fetched_at: now().getTime(), statuses });
       dirty = true;
+      pending += 1;
+      if (pending >= STATUS_CACHE_FLUSH_EVERY) await flush();
       return statuses;
     },
-    /** 引き直した分があれば、鮮度の残っている項目と合わせて 1 回だけ書く。失敗は無視する。 */
-    async flush(): Promise<void> {
-      if (!cache || !dirty || !entries) return;
-      dirty = false;
-      try {
-        await cache.kv.put(
-          statusCacheKey(cache.userId),
-          JSON.stringify(Object.fromEntries(entries)),
-          { expirationTtl: STATUS_CACHE_TTL_SECONDS },
-        );
-      } catch {
-        // キャッシュなしとして続ける
-      }
-    },
+    flush,
   };
 }
 

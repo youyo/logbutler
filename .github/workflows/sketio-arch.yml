@@ -5,12 +5,14 @@ on:
   workflow_dispatch:
 jobs:
   arch:
+    # upstream だけで動かす。下流(fork・ミラー)では Sketio Arch の連携が許可されておらず 403 で失敗するため(ADR 0011)
+    if: ${{ github.repository == 'youyo/logbutler' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2   # mode: diff reads the pull request's head commit (a parent of the merge commit)
       - uses: sketio-app/action@ee2ece31b82c193f9985fe2c0482fe787f9f9f32 # v1.11.0

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { API_BUDGET, MAX_STATUS_PROJECTS } from "../../src/analysis/budget";
+import {
+  API_BUDGET,
+  MAX_STATUS_PROJECT_KEYS,
+  MAX_STATUS_PROJECTS,
+} from "../../src/analysis/budget";
+import { resolveNotClosedStatusIds } from "../../src/analysis/open-statuses";
+import { createStatusLookup, STATUS_CACHE_FLUSH_EVERY } from "../../src/analysis/status-cache";
+import type { BacklogClient } from "../../src/backlog/client";
 import { myTasks } from "../../src/mcp/tools/analysis";
 import { issueList } from "../../src/mcp/tools/issue";
 import { endless, issue, NOW } from "../helpers/analysis-fixtures";
@@ -7,7 +14,7 @@ import { FakeKv } from "../helpers/fake-kv";
 import type { RecordedCall } from "../helpers/mock-fetch";
 import { callTool, type Respond } from "../helpers/tool-call";
 
-/** 状態一覧の KV キャッシュ(ADR 0016 §1)。 */
+/** 状態一覧の KV キャッシュ(ADR 0016 §1)と、上限 200・途中 flush(ADR 0017 §1)。 */
 
 const st = (id: number, name: string) => ({
   id,
@@ -229,7 +236,7 @@ describe("状態一覧のキャッシュ(my_tasks)", () => {
   });
 });
 
-describe("上限 100 プロジェクト", () => {
+describe("上限 200 プロジェクト(ADR 0017)", () => {
   const projects = (n: number) =>
     Array.from({ length: n }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
   const statuses = (n: number) =>
@@ -237,32 +244,36 @@ describe("上限 100 プロジェクト", () => {
       projects(n).map((p) => [`GET /projects/${p.projectKey}/statuses`, STANDARD]),
     );
 
-  it("MAX_STATUS_PROJECTS は 100", () => {
-    expect(MAX_STATUS_PROJECTS).toBe(100);
+  it("MAX_STATUS_PROJECTS は 200、明示キーの上限 MAX_STATUS_PROJECT_KEYS は 100、途中 flush は 20 件ごと", () => {
+    expect(MAX_STATUS_PROJECTS).toBe(200);
+    expect(MAX_STATUS_PROJECT_KEYS).toBe(100);
+    expect(STATUS_CACHE_FLUSH_EVERY).toBe(20);
   });
 
-  it("issue_list not-closed(指定なし): 21〜100 プロジェクトでも argument_error にならず、全プロジェクトの状態一覧を引く", async () => {
-    for (const n of [21, 100]) {
+  it("issue_list not-closed(指定なし): 101〜200 プロジェクトでも argument_error にならず、全プロジェクトの状態一覧を引く", async () => {
+    for (const n of [101, 200]) {
       const r = await listNotClosed({ "GET /projects": projects(n), ...statuses(n) }, undefined);
       expect(r.isError, `${n}: ${r.text}`).toBe(false);
       expect(statusCalls(r.calls)).toHaveLength(n);
     }
   });
 
-  it("issue_list not-closed(指定なし): 101 プロジェクトは argument_error(課題一覧は呼ばない)", async () => {
-    const r = await listNotClosed({ "GET /projects": projects(101) }, undefined);
+  it("issue_list not-closed(指定なし): 201 プロジェクトは argument_error(状態一覧も課題一覧も呼ばない)", async () => {
+    const r = await listNotClosed({ "GET /projects": projects(201) }, undefined);
     expect(r.json.error.code).toBe("argument_error");
     expect(r.json.error.message).toContain("project_key");
+    expect(r.json.error.message).toContain("200");
     expect(r.calls).toEqual(["GET /projects?archived=false"]);
   });
 
-  it("issue_list not-closed: project_keys は 100 まで通り、101 は Backlog を呼ぶ前に argument_error", async () => {
+  it("issue_list not-closed: project_keys は 100 まで通り、101 は Backlog を呼ぶ前に argument_error(明示キーの上限は 100 のまま)", async () => {
     const keys = (n: number) =>
       projects(n)
         .map((p) => p.projectKey)
         .join(",");
     const bad = await listNotClosed({}, undefined, { args: { project_keys: keys(101) } });
     expect(bad.json.error.code).toBe("argument_error");
+    expect(bad.json.error.message).toContain("100");
     expect(bad.calls).toEqual([]);
     const get = Object.fromEntries(
       projects(100).map((p) => [`GET /projects/${p.projectKey}`, { id: p.id }]),
@@ -273,7 +284,7 @@ describe("上限 100 プロジェクト", () => {
     expect(ok.isError, ok.text).toBe(false);
   });
 
-  it("my_tasks: 100 プロジェクトまでは truncated にならず、101 では先頭 100 件だけ使い truncated と warning", async () => {
+  it("my_tasks: 200 プロジェクトまでは truncated にならず、201 では先頭 200 件だけ使い truncated と warning", async () => {
     const base = {
       "GET /users/myself": { id: 1, userId: "a", name: "A" },
       "GET /users/1/watchings": [],
@@ -282,38 +293,188 @@ describe("上限 100 プロジェクト", () => {
     const ok = await callTool(
       "logbutler_my_tasks",
       {},
-      { ...base, "GET /projects": projects(100), ...statuses(100) },
+      { ...base, "GET /projects": projects(200), ...statuses(200) },
       { now: NOW },
     );
-    expect(statusCalls(ok.calls)).toHaveLength(100);
+    expect(statusCalls(ok.calls)).toHaveLength(200);
     expect(ok.json.analysis.truncated).toBe(false);
     expect(ok.json.warnings).toEqual([]);
     const over = await callTool(
       "logbutler_my_tasks",
       {},
-      { ...base, "GET /projects": projects(101), ...statuses(101) },
+      { ...base, "GET /projects": projects(201), ...statuses(201) },
       { now: NOW },
     );
-    expect(statusCalls(over.calls)).toHaveLength(100);
+    expect(statusCalls(over.calls)).toHaveLength(200);
     expect(over.json.analysis.truncated).toBe(true);
     expect(over.json.warnings.map((w: { code: string }) => w.code)).toEqual([
       "status_projects_truncated",
     ]);
+    expect(over.json.warnings[0].message).toContain("200 of 201");
   });
 });
 
-describe("呼び出し回数の上限(ADR 0016)", () => {
-  it("my_tasks は 132 = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 100 + 10 + 10 + 10", () => {
-    expect(API_BUDGET.myTasks).toBe(132);
-    expect(myTasks.maxApiCalls).toBe(132);
+describe("キャッシュの途中 flush(20 件ごと。ADR 0017)", () => {
+  const projects = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+  const FORBIDDEN = () =>
+    new Response(JSON.stringify({ errors: [{ message: "x", code: 11 }] }), { status: 403 });
+  const storedKeys = (kv: FakeKv) =>
+    Object.keys(JSON.parse(kv.store.get(KEY(42))?.value ?? "{}")).sort();
+  const expectedKeys = (n: number) => Array.from({ length: n }, (_, i) => `P${i}`).sort();
+
+  it("createStatusLookup: 新しく引いたプロジェクトが 20 件たまるごとに書き、最後にも書く。書き込み回数は ⌈新規件数 / 20⌉ 以内", async () => {
+    for (const [n, puts] of [
+      [1, 1],
+      [19, 1],
+      [20, 1],
+      [21, 2],
+      [45, 3],
+      [200, 10],
+    ] as const) {
+      const kv = new FakeKv();
+      const client = {
+        request: async () => [{ id: 1, name: "未対応" }],
+      } as unknown as BacklogClient;
+      const lookup = createStatusLookup(client, { kv, userId: 42 }, () => T0);
+      for (let i = 0; i < n; i++) await lookup.get(`P${i}`);
+      await lookup.flush();
+      expect(kv.puts, `${n}`).toHaveLength(puts);
+      expect(kv.gets, `${n}`).toHaveLength(1);
+      expect(storedKeys(kv), `${n}`).toEqual(expectedKeys(n));
+    }
   });
 
-  it("issue_list は 204 = GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 + 一覧 1", () => {
-    expect(issueList.maxApiCalls).toBe(204);
+  it("createStatusLookup: 20 件目を引いた時点(21 件目を引く前)で、すでに KV に 20 件が書かれている", async () => {
+    const kv = new FakeKv();
+    let seenAt21: number | undefined;
+    const client = {
+      request: async (_m: string, path: string) => {
+        if (path === "/projects/P20/statuses") seenAt21 = kv.puts.length;
+        return [{ id: 1, name: "未対応" }];
+      },
+    } as unknown as BacklogClient;
+    const lookup = createStatusLookup(client, { kv, userId: 42 }, () => T0);
+    for (let i = 0; i < 21; i++) await lookup.get(`P${i}`);
+    expect(seenAt21).toBe(1);
+    expect(storedKeys(kv)).toEqual(expectedKeys(20));
   });
 
-  it("my_tasks: 100 プロジェクトで 3 つとも上限まで続いても 132 回で止まる", async () => {
-    const projects = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+  it("createStatusLookup: キャッシュにあった分は新規に数えない(ヒットだけなら書かない)", async () => {
+    const kv = new FakeKv();
+    const client = { request: async () => [{ id: 1, name: "未対応" }] } as unknown as BacklogClient;
+    const warm = createStatusLookup(client, { kv, userId: 42 }, () => T0);
+    for (let i = 0; i < 30; i++) await warm.get(`P${i}`);
+    await warm.flush();
+    const putsBefore = kv.puts.length;
+    const again = createStatusLookup(client, { kv, userId: 42 }, () => plus(10));
+    for (let i = 0; i < 30; i++) await again.get(`P${i}`);
+    await again.flush();
+    expect(kv.puts).toHaveLength(putsBefore);
+  });
+
+  it("createStatusLookup: 途中の書き込みが失敗しても取得は続く", async () => {
+    const kv = new FakeKv();
+    kv.failPut = true;
+    const client = { request: async () => [{ id: 1, name: "未対応" }] } as unknown as BacklogClient;
+    const lookup = createStatusLookup(client, { kv, userId: 42 }, () => T0);
+    for (let i = 0; i < 25; i++) expect(await lookup.get(`P${i}`)).toHaveLength(1);
+    await lookup.flush();
+  });
+
+  it("issue_list(指定なし): 45 件目で Backlog がエラーになっても、引いた 44 件は KV に残り、次の呼び出しはその分を引かない", async () => {
+    const kv = new FakeKv();
+    const respond = (failFrom: number): Record<string, Respond> => ({
+      "GET /projects": projects(60),
+      ...Object.fromEntries(
+        projects(60).map((p, i) => [
+          `GET /projects/${p.projectKey}/statuses`,
+          i >= failFrom ? FORBIDDEN : STANDARD,
+        ]),
+      ),
+    });
+    const first = await listNotClosed(respond(44), kv);
+    expect(first.json.error.code).toBe("permission_error");
+    expect(statusCalls(first.calls)).toHaveLength(45);
+    expect(kv.puts).toHaveLength(3); // 20 件目・40 件目・失敗後の finally
+    expect(storedKeys(kv)).toEqual(expectedKeys(44));
+
+    const second = await listNotClosed(respond(999), kv, { now: plus(30) });
+    expect(second.isError, second.text).toBe(false);
+    expect(statusCalls(second.calls)).toHaveLength(16); // P44〜P59 だけ
+    expect(statusCalls(second.calls)[0]).toBe("GET /projects/P44/statuses");
+    expect(storedKeys(kv)).toEqual(expectedKeys(60));
+  });
+
+  it("issue_list(指定なし): 呼び出し上限で中断しても、それまでに引いた分は KV に残る(finally で flush)", async () => {
+    const kv = new FakeKv();
+    const limited = {
+      request: async (_m: string, path: string) => {
+        if (path === "/projects/P44/statuses") throw new Error("call limit");
+        return [{ id: 1, name: "未対応" }];
+      },
+    } as unknown as BacklogClient;
+    await expect(
+      resolveNotClosedStatusIds(
+        { client: limited, now: () => T0, statusCache: { kv, userId: 42 } },
+        Array.from({ length: 60 }, (_, i) => `P${i}`),
+      ),
+    ).rejects.toThrow("call limit");
+    expect(kv.puts).toHaveLength(3);
+    expect(storedKeys(kv)).toEqual(expectedKeys(44));
+  });
+
+  it("my_tasks: 45 件目だけ失敗しても warning にして続け、引けた 59 件を KV に残す。失敗した分は次回引き直す", async () => {
+    const kv = new FakeKv();
+    const ME = {
+      "GET /users/myself": { id: 1, userId: "a", name: "A" },
+      "GET /users/1/watchings": [],
+      "GET /issues": [],
+      "GET /projects": projects(60),
+    };
+    const statusesWith = (bad: number) =>
+      Object.fromEntries(
+        projects(60).map((p, i) => [
+          `GET /projects/${p.projectKey}/statuses`,
+          i === bad ? FORBIDDEN : STANDARD,
+        ]),
+      );
+    const first = await callTool(
+      "logbutler_my_tasks",
+      {},
+      { ...ME, ...statusesWith(44) },
+      { now: NOW, statusCache: { kv, userId: 42 } },
+    );
+    expect(first.isError, first.text).toBe(false);
+    expect(first.json.warnings.map((w: { code: string }) => w.code)).toEqual([
+      "statuses_fetch_failed",
+    ]);
+    expect(storedKeys(kv)).toEqual(expectedKeys(60).filter((k) => k !== "P44"));
+    expect(kv.puts).toHaveLength(Math.ceil(59 / 20)); // 20, 40, 最後
+
+    const second = await callTool(
+      "logbutler_my_tasks",
+      {},
+      { ...ME, ...statusesWith(-1) },
+      { now: new Date(NOW.getTime() + 30_000), statusCache: { kv, userId: 42 } },
+    );
+    expect(statusCalls(second.calls)).toEqual(["GET /projects/P44/statuses"]);
+  });
+});
+
+describe("呼び出し回数の上限(ADR 0016 / 0017)", () => {
+  it("my_tasks は 232 = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 200 + 10 + 10 + 10", () => {
+    expect(API_BUDGET.myTasks).toBe(232);
+    expect(myTasks.maxApiCalls).toBe(232);
+  });
+
+  it("issue_list は 205 = プロジェクト一覧 1 + 状態一覧 200 + GetMyself 1 + 子の収集 2 + 一覧 1(指定ありの 204 より大きい方)", () => {
+    expect(API_BUDGET.issueList).toBe(205);
+    expect(issueList.maxApiCalls).toBe(205);
+  });
+
+  it("my_tasks: 200 プロジェクトで 3 つとも上限まで続いても 232 回で止まる", async () => {
+    const projects = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
     const r = await callTool(
       "logbutler_my_tasks",
       { max_response_tokens: 0 },
@@ -335,7 +496,36 @@ describe("呼び出し回数の上限(ADR 0016)", () => {
       { now: NOW },
     );
     expect(r.isError, r.text).toBe(false);
-    expect(r.calls).toHaveLength(132);
+    expect(r.calls).toHaveLength(232);
+  });
+
+  const childAndList = (call: RecordedCall) => {
+    const q = new URL(call.url).searchParams;
+    if (q.get("sort") !== "created") return []; // 最後の一覧
+    return Array.from({ length: q.get("offset") ? 99 : 100 }, (_, i) => ({ id: 1000 + i }));
+  };
+
+  it("issue_list: プロジェクト指定なし(200 プロジェクト)+ assignee me + not-closed + include_descendants の最悪ケースが 205 回で通る", async () => {
+    const keys = Array.from({ length: 200 }, (_, i) => `P${i}`);
+    const r = await callTool(
+      "logbutler_issue_list",
+      {
+        assignee_id: "me",
+        status_id: "not-closed",
+        parent_issue_ids: "5",
+        include_descendants: true,
+        max_response_tokens: 0,
+      },
+      {
+        "GET /users/myself": { id: 1, userId: "a", name: "A" },
+        "GET /projects": keys.map((k, i) => ({ id: i + 1, projectKey: k })),
+        ...Object.fromEntries(keys.map((k) => [`GET /projects/${k}/statuses`, STANDARD])),
+        "GET /issues": childAndList,
+      },
+      { now: NOW },
+    );
+    expect(r.isError, r.text).toBe(false);
+    expect(r.calls).toHaveLength(205);
   });
 
   it("issue_list: 100 プロジェクト指定 + assignee me + not-closed + include_descendants の最悪ケースが 204 回で通る", async () => {
@@ -344,11 +534,7 @@ describe("呼び出し回数の上限(ADR 0016)", () => {
       "GET /users/myself": { id: 1, userId: "a", name: "A" },
       ...Object.fromEntries(keys.map((k, i) => [`GET /projects/${k}`, { id: i + 1 }])),
       ...Object.fromEntries(keys.map((k) => [`GET /projects/${k}/statuses`, STANDARD])),
-      "GET /issues": (call: RecordedCall) => {
-        const q = new URL(call.url).searchParams;
-        if (q.get("sort") !== "created") return []; // 最後の一覧
-        return Array.from({ length: q.get("offset") ? 99 : 100 }, (_, i) => ({ id: 1000 + i }));
-      },
+      "GET /issues": childAndList,
     };
     const r = await callTool(
       "logbutler_issue_list",

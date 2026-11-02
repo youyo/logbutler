@@ -118,3 +118,71 @@ describe("E2E 17: 状態一覧の KV キャッシュ(ADR 0016)", () => {
     expect(statusLists(calls)).toHaveLength(1);
   });
 });
+
+describe("E2E 17b: 状態一覧の上限 200 と途中 flush(ADR 0017)", () => {
+  const projects = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+  const statusHandlers = (n: number, failAt = -1) =>
+    Object.fromEntries(
+      projects(n).map((p, i) => [
+        `GET ${API}/projects/${p.projectKey}/statuses`,
+        () =>
+          i === failAt
+            ? jsonResponse({ errors: [{ message: "x", code: 11 }] }, 403)
+            : jsonResponse(STATUSES),
+      ]),
+    );
+
+  it("参加プロジェクトが 150 件でも issue_list(not-closed・指定なし)は全プロジェクトの状態一覧を引き、KV に 150 件入る", async () => {
+    const { token, calls } = await loggedIn({
+      [`GET ${API}/projects`]: () => jsonResponse(projects(150)),
+      ...statusHandlers(150),
+      [`GET ${API}/issues`]: () => jsonResponse([]),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_list", { status_id: "not-closed" }),
+    );
+    expect(rpc.result?.isError, firstText(rpc)).toBeFalsy();
+    expect(statusLists(calls)).toHaveLength(150);
+    const stored = JSON.parse((await env.OAUTH_KV.get("statuses:42")) ?? "{}");
+    expect(Object.keys(stored)).toHaveLength(150);
+  });
+
+  it("201 件では argument_error。45 件目で失敗しても、引けた 44 件は実 KV に残り、次の呼び出しは続きから引く", async () => {
+    const over = await loggedIn({ [`GET ${API}/projects`]: () => jsonResponse(projects(201)) });
+    const tooMany = await readRpc(
+      await call(over.token, "logbutler_issue_list", { status_id: "not-closed" }),
+    );
+    expect(tooMany.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(tooMany)).error.code).toBe("argument_error");
+
+    const failing = await loggedIn({
+      [`GET ${API}/projects`]: () => jsonResponse(projects(60)),
+      ...statusHandlers(60, 44),
+      [`GET ${API}/issues`]: () => jsonResponse([]),
+    });
+    const first = await readRpc(
+      await call(failing.token, "logbutler_issue_list", { status_id: "not-closed" }),
+    );
+    expect(first.result?.isError).toBe(true);
+    expect(statusLists(failing.calls)).toHaveLength(45);
+    const kept = JSON.parse((await env.OAUTH_KV.get("statuses:42")) ?? "{}");
+    expect(Object.keys(kept)).toHaveLength(44);
+    expect(JSON.stringify(Object.keys(kept))).not.toContain("P44");
+
+    const ok = await loggedIn({
+      [`GET ${API}/projects`]: () => jsonResponse(projects(60)),
+      ...statusHandlers(60),
+      [`GET ${API}/issues`]: () => jsonResponse([]),
+    });
+    const second = await readRpc(
+      await call(ok.token, "logbutler_issue_list", { status_id: "not-closed" }),
+    );
+    expect(second.result?.isError, firstText(second)).toBeFalsy();
+    expect(statusLists(ok.calls)).toHaveLength(16);
+    expect(statusLists(ok.calls)[0]).toBe("GET /projects/P44/statuses");
+    expect(Object.keys(JSON.parse((await env.OAUTH_KV.get("statuses:42")) ?? "{}"))).toHaveLength(
+      60,
+    );
+  });
+});
