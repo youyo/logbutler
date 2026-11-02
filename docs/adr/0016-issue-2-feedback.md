@@ -15,16 +15,16 @@
 
 ### 1. 状態一覧を KV に短時間キャッシュし、上限を 100 プロジェクトに上げる
 
-- `MAX_STATUS_PROJECTS` を **20 → 100**。`my_tasks` の truncated / warning、`issue_list` の `argument_error`(指定あり・なしとも)の意味は変えず、閾値だけ上げる。
+- `MAX_STATUS_PROJECTS` を **20 → 100**(**ADR 0017 で、`my_tasks` と指定なしの `issue_list` は 200 に更新。明示キーの上限は `MAX_STATUS_PROJECT_KEYS` = 100 のまま**)。`my_tasks` の truncated / warning、`issue_list` の `argument_error`(指定あり・なしとも)の意味は変えず、閾値だけ上げる。
 - 状態一覧(`GET /projects/:key/statuses` の `{id, name}` だけ)を `OAUTH_KV` の **`statuses:<backlogUserId>`** に 1 ユーザー 1 値の JSON で置く(ADR 0005 と同じ namespace・接頭辞方式)。値はプロジェクトキー → `{ fetched_at, statuses: [{id, name}] }`。
   - **鮮度は 600 秒**。`fetched_at` が 600 秒より古いプロジェクトは未取得として Backlog から引き直す(KV の TTL だけに頼ると、書き足すたびに古い項目の寿命が延びるため)。KV の `expirationTtl` も 600 秒にする。
-  - 1 回のツール呼び出しで KV の読み取りは 1 回、書き込みは Backlog から引いたプロジェクトがあったときだけ 1 回。
+  - 1 回のツール呼び出しで KV の読み取りは 1 回、書き込みは Backlog から引いたプロジェクトがあったときだけ 1 回(**ADR 0017 で、新しく引いた 20 件たまるごとと最後に書く形に更新**)。
   - キーに Backlog のユーザー ID を含める。参加していないプロジェクトの状態名が、別ユーザーのキャッシュ経由で見えないようにするため。値に Backlog のトークン・クライアント情報は含めない。
   - KV の読み書きの失敗・壊れた値はツールを止めない(キャッシュなしとして続ける。ADR 0005 と同じ)。
   - 状態の追加・変更直後は最大 600 秒古い一覧で判定しうる。`status_add` / `status_update` / `status_delete`(ADR 0013)が成功したら、そのユーザーのキャッシュ値を削除する(自分の変更はすぐ反映する。他人の変更は 600 秒以内に反映)。
 - 呼び出し回数(キャッシュが空の最悪ケース):
-  - `my_tasks`: GetMyself 1 + プロジェクト一覧 1 + 状態一覧 100 + overdue / upcoming / watching 各 10 ページ = **132**。
-  - `issue_list`: GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 + 一覧 1 = **204**(指定なしはプロジェクト一覧 1 + 状態一覧 100 + … でこれより小さい)。
+  - `my_tasks`: GetMyself 1 + プロジェクト一覧 1 + 状態一覧 100 + overdue / upcoming / watching 各 10 ページ = **132**(**ADR 0017 で 232 に更新**)。
+  - `issue_list`: GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 + 一覧 1 = **204**(**ADR 0017 で、指定なしを含めた最悪ケースの 205 に更新**。指定なしはプロジェクト一覧 1 + 状態一覧 100 + … でこれより小さい)。
   - Workers の有料プランの subrequest 上限は既定 10,000(2026-02 の Cloudflare changelog。KV も subrequest に数える)なので収まる。無料プラン(50)では超えうるが、分析ツールと同じく有料プランを前提にする(ADR 0006)。
 - 実時間: キャッシュが空のとき 100 回の直列呼び出しで数十秒かかりうる。2 回目以降(600 秒以内)はほぼ KV の 1 回で済む。実機の所要時間は [manual-verification](../manual-verification.md) の V17 で確かめる。
 

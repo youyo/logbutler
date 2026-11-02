@@ -40,7 +40,7 @@ function addOpenIds(into: Set<number>, statuses: readonly BacklogStatus[]): void
 
 /**
  * issue_list の `status_id=not-closed` 用。`projectKeys` があればそのプロジェクト、なければ
- * 参加プロジェクトすべて(MAX_STATUS_PROJECTS 超は argument_error)。取得の失敗はそのまま投げる。
+ * 参加プロジェクトすべて(MAX_STATUS_PROJECTS = 200 超は argument_error。ADR 0017)。取得の失敗はそのまま投げる。
  */
 export async function resolveNotClosedStatusIds(
   ctx: StatusLookupContext,
@@ -102,20 +102,23 @@ export async function collectOpenStatusIds(ctx: StatusLookupContext): Promise<Op
   }
   const ids = new Set<number>();
   const lookup = createStatusLookup(client, ctx.statusCache, ctx.now);
-  for (const p of projects) {
-    try {
-      addOpenIds(ids, await lookup.get(p.projectKey));
-    } catch (e) {
-      warnings.push(
-        warningFromError(
-          e,
-          "statuses_fetch_failed",
-          `statuses fetch failed for project ${p.projectKey}`,
-          "statuses",
-        ),
-      );
+  try {
+    for (const p of projects) {
+      try {
+        addOpenIds(ids, await lookup.get(p.projectKey));
+      } catch (e) {
+        warnings.push(
+          warningFromError(
+            e,
+            "statuses_fetch_failed",
+            `statuses fetch failed for project ${p.projectKey}`,
+            "statuses",
+          ),
+        );
+      }
     }
+  } finally {
+    await lookup.flush(); // 想定外の失敗でも、ここまでに引いた分は残す
   }
-  await lookup.flush();
   return { ids: [...ids], truncated, warnings };
 }

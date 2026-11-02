@@ -1130,6 +1130,10 @@
     "description": "Get issue details by issue key",
     "inputSchema": {
       "properties": {
+        "detail": {
+          "description": "Response format: full (default; Backlog's raw issue object, camelCase, with full user objects) or summary (a compact envelope { issue } in snake_case: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated and the full description; users are names only)",
+          "type": "string"
+        },
         "issue_key": {
           "description": "Issue key (e.g. PROJECT-123)",
           "type": "string"
@@ -1165,7 +1169,7 @@
           "type": "number"
         },
         "detail": {
-          "description": "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
+          "description": "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } in snake_case, without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
           "type": "string"
         },
         "due_date": {

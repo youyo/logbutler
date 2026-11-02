@@ -1,7 +1,11 @@
 import { z } from "zod";
-import { API_BUDGET, MAX_STATUS_PROJECTS } from "../../analysis/budget";
+import { API_BUDGET, MAX_STATUS_PROJECT_KEYS } from "../../analysis/budget";
 import { analysisEnvelope } from "../../analysis/envelope";
-import { extractProjectKey } from "../../analysis/issue-detail";
+import {
+  type SummarizableIssue,
+  summarizeIssue,
+  summarizeIssueWithDescription,
+} from "../../analysis/issue-summary";
 import { resolveNotClosedStatusIds } from "../../analysis/open-statuses";
 import type { BacklogClient } from "../../backlog/client";
 import { fetchByOffset } from "../../backlog/paging";
@@ -28,14 +32,34 @@ import {
 import { defineTool } from "../registry";
 import { downloadResult } from "./download";
 
+/** issue_get / issue_list の応答形式。full は Backlog の生データ(既定)、summary は要約(ADR 0016 / 0017)。 */
+const DETAILS = ["full", "summary"] as const;
+
+function parseDetail(detail: string | undefined): "full" | "summary" {
+  if (detail !== undefined && !(DETAILS as readonly string[]).includes(detail)) {
+    throw new ArgumentError(`detail must be "full" or "summary", got "${detail}"`);
+  }
+  return detail === "summary" ? "summary" : "full";
+}
+
 export const issueGet = defineTool({
   name: "logbutler_issue_get",
   title: "課題詳細取得",
   description: "Get issue details by issue key",
   category: "ReadOnly",
   toolset: "issue",
-  inputSchema: z.object({ issue_key: reqStr("Issue key (e.g. PROJECT-123)") }),
-  handler: ({ issue_key }, { client }) => client.request("GET", `/issues/${seg(issue_key)}`),
+  inputSchema: z.object({
+    issue_key: reqStr("Issue key (e.g. PROJECT-123)"),
+    detail: optStr(
+      "Response format: full (default; Backlog's raw issue object, camelCase, with full user objects) or summary (a compact envelope { issue } in snake_case: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated and the full description; users are names only)",
+    ),
+  }),
+  handler: async ({ issue_key, detail }, ctx) => {
+    const mode = parseDetail(detail); // Backlog を呼ぶ前に検証する
+    const found = await ctx.client.request<SummarizableIssue>("GET", `/issues/${seg(issue_key)}`);
+    if (mode === "full" || !found) return found;
+    return analysisEnvelope(ctx, "issue_get", { issue: summarizeIssueWithDescription(found) });
+  },
 });
 
 /**
@@ -69,42 +93,7 @@ async function collectChildIds(client: BacklogClient, parents: number[]): Promis
   return items.map((i) => i.id);
 }
 
-/** issue_list の応答形式。full は Backlog の生の配列(既定)、summary は要約(ADR 0016)。 */
-const LIST_DETAILS = ["full", "summary"] as const;
-
-interface ListedIssue {
-  id: number;
-  issueKey: string;
-  summary: string;
-  issueType?: { name?: string } | null;
-  status?: { name?: string } | null;
-  priority?: { name?: string } | null;
-  assignee?: { name?: string } | null;
-  startDate?: string | null;
-  dueDate?: string | null;
-  parentIssueId?: number | null;
-  created?: string;
-  updated?: string;
-}
-
-/** detail=summary の 1 件(snake_case。description は含めない。本文は issue_get で取る)。 */
-function summarizeIssue(i: ListedIssue) {
-  return {
-    id: i.id,
-    issue_key: i.issueKey,
-    project_key: extractProjectKey(i.issueKey ?? ""),
-    summary: i.summary,
-    issue_type: i.issueType?.name ?? "",
-    status: i.status?.name ?? "",
-    priority: i.priority?.name ?? "",
-    assignee: i.assignee?.name ?? null,
-    start_date: i.startDate ?? null,
-    due_date: i.dueDate ?? null,
-    parent_issue_id: i.parentIssueId ?? null,
-    created: i.created ?? "",
-    updated: i.updated ?? "",
-  };
-}
+type ListedIssue = SummarizableIssue;
 
 export const issueList = defineTool({
   name: "logbutler_issue_list",
@@ -112,7 +101,7 @@ export const issueList = defineTool({
   description: "List issues with optional filters, including parent issue filtering",
   category: "ReadOnly",
   toolset: "issue",
-  // GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 ページ(親 + 子 ≦ 200 ID で打ち切るので 3 ページ目はない。ADR 0015)+ 一覧 1 = 204(キャッシュが空の最悪ケース。ADR 0016)
+  // 指定なし: プロジェクト一覧 1 + 状態一覧 200 + GetMyself 1 + 子の収集 2 ページ(親 + 子 ≦ 200 ID で打ち切るので 3 ページ目はない。ADR 0015)+ 一覧 1 = 205。指定あり: GetProject 100 + 1 + 状態一覧 100 + 2 + 1 = 204。大きい方(キャッシュが空の最悪ケース。ADR 0017)
   maxApiCalls: API_BUDGET.issueList,
   inputSchema: z.object({
     project_key: optStr("Filter by single project key (legacy; use project_keys for multiple)"),
@@ -141,17 +130,14 @@ export const issueList = defineTool({
       `If true (requires parent_issue_ids), also return the grandchild issues: the children of the given parents and their children. Default false returns only direct children. At most ${MAX_DESCENDANT_QUERY_IDS} issue IDs (parents + children) are supported; beyond that an argument_error is returned. The other filters, count, offset and sort apply to the combined result`,
     ),
     detail: optStr(
-      "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
+      "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } in snake_case, without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
     ),
     timezone: timezoneArg(),
   }),
   handler: async (a, ctx) => {
     const { client, now, timezone, statusCache } = ctx;
     // 入力の検証は、Backlog を呼ぶ前にすべて済ませる。
-    if (a.detail !== undefined && !(LIST_DETAILS as readonly string[]).includes(a.detail)) {
-      throw new ArgumentError(`detail must be "full" or "summary", got "${a.detail}"`);
-    }
-    const summary = a.detail === "summary";
+    const summary = parseDetail(a.detail) === "summary";
     const respond = (issues: ListedIssue[]) =>
       summary
         ? analysisEnvelope(ctx, "issue_list", {
@@ -171,9 +157,9 @@ export const issueList = defineTool({
       );
     }
     const keys = [...(a.project_key ? [a.project_key] : []), ...parseCsvStrings(a.project_keys)];
-    if (status === "not-closed" && new Set(keys).size > MAX_STATUS_PROJECTS) {
+    if (status === "not-closed" && new Set(keys).size > MAX_STATUS_PROJECT_KEYS) {
       throw new ArgumentError(
-        `status_id=not-closed looks up the statuses of each project, so at most ${MAX_STATUS_PROJECTS} projects can be given, got ${new Set(keys).size}`,
+        `status_id=not-closed looks up the statuses of each project, so at most ${MAX_STATUS_PROJECT_KEYS} projects can be given, got ${new Set(keys).size}`,
       );
     }
     const today = a.due_date || a.start_date ? todayIn(now(), timezone) : undefined;

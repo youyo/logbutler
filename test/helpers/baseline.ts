@@ -232,6 +232,12 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
       "detail 引数(任意・文字列 full / summary・既定 full)の追加。summary は description を含まない要約をエンベロープで返し、少ない件数でも応答が大きくなって response_too_large になる問題を避ける(GitHub issue #2。ADR 0016)。既定の full は logvalet と同じ Backlog の生の配列のまま。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.detail の追加だけに固定している。",
   },
   {
+    tool: "logbutler_issue_get",
+    fields: ["inputSchema"],
+    reason:
+      "detail 引数(任意・文字列 full / summary・既定 full)の追加。summary は issue_list の summary と同じ 13 項目 + description 全文を、ユーザーを名前だけにしてエンベロープで返す(担当者・作成者・更新者ごとの nulabAccount を含むユーザー情報が重いため。GitHub issue #4。ADR 0017)。既定の full は logvalet と同じ Backlog の生データのまま。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.detail の追加だけに固定している。max_response_tokens の追加は別の許容項目。",
+  },
+  {
     tool: "logbutler_issue_update",
     fields: ["inputSchema"],
     reason:
