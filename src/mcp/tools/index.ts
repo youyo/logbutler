@@ -37,6 +37,7 @@ import {
   issueCommentAdd,
   issueCommentUpdate,
   issueCreate,
+  issueDelete,
   issueRelatedAdd,
   issueRelatedDelete,
   issueUpdate,
@@ -127,6 +128,8 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   issueAttachmentDelete,
   watchingDelete,
   projectConventions,
+  // ADR 0016: 課題の削除(confirm_issue_key 必須)
+  issueDelete,
   // M05A: 分析系の加工ツール 11 個
   issueStale,
   projectBlockers,

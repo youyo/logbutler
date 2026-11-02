@@ -222,13 +222,14 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
       "watching_mark_as_read",
       "issue_related_delete",
       "issue_attachment_delete",
+      "issue_delete",
       "watching_delete",
     ].map((n) => `logbutler_${n}`);
 
     const rw = (await rpcWith("false", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(rw, n).toContain(n);
     expect(rw).toContain("logbutler_project_conventions");
-    expect(rw).toHaveLength(38 + 14 + 1 + 11 + 7 + 3 + 12); // + M05A の分析 11 + M05B の 7 + M06 の 3(すべて ReadOnly)+ プロジェクト設定 12(書き込み・破壊的。E2E 16 に read_only の検証)
+    expect(rw).toHaveLength(38 + 15 + 1 + 11 + 7 + 3 + 12); // + M05A の分析 11 + M05B の 7 + M06 の 3(すべて ReadOnly)+ プロジェクト設定 12(書き込み・破壊的。E2E 16 に read_only の検証)
 
     const ro = (await rpcWith("true", "tools/list", {})).result?.tools?.map((t) => t.name) ?? [];
     for (const n of WRITE) expect(ro, n).not.toContain(n);
@@ -246,6 +247,43 @@ describe("E2E 10: 書き込みツール(M04)が OAuth 済みトークンの /mcp
     });
     expect(blocked.result).toBeUndefined();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("E2E 10a: issue_delete(ADR 0016)", () => {
+  it("OAuth 済みの /mcp で、確認キーが一致すれば DELETE /issues/{key} を 1 回だけ呼び、削除された課題を返す", async () => {
+    const deleted = { id: 9, issueKey: "PROJ-9", summary: "消す" };
+    const { token, calls } = await loggedIn({
+      [`DELETE ${API}/issues/PROJ-9`]: () => jsonResponse(deleted),
+    });
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_delete", {
+        issue_key: "PROJ-9",
+        confirm_issue_key: "PROJ-9",
+      }),
+    );
+    expect(rpc.result?.isError).toBeFalsy();
+    expect(JSON.parse(firstText(rpc))).toEqual(deleted);
+    expect(paths(calls)).toEqual(["DELETE /issues/PROJ-9"]);
+    expect(calls[0]?.headers.get("authorization")).toMatch(/^Bearer backlog-at-/);
+  });
+
+  it("確認キーが違えば argument_error で、Backlog には通信しない。read_only=true では tools/list に出ない", async () => {
+    const { token, calls } = await loggedIn({});
+    const rpc = await readRpc(
+      await call(token, "logbutler_issue_delete", {
+        issue_key: "PROJ-9",
+        confirm_issue_key: "PROJ-8",
+      }),
+    );
+    expect(rpc.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(rpc)).error.code).toBe("argument_error");
+    expect(calls).toHaveLength(0);
+
+    const ro = await readRpc(
+      await mcpRequest(token, "tools/list", {}, `${MCP_URL}?read_only=true`),
+    );
+    expect(ro.result?.tools?.map((t) => t.name)).not.toContain("logbutler_issue_delete");
   });
 });
 

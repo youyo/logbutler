@@ -257,13 +257,13 @@ describe("my_tasks", () => {
       expect(issueCalls(r.calls)[0]).toContain("statusId[]=1&statusId[]=2&statusId[]=3");
     });
 
-    it("参加プロジェクトが 20 を超えたら、先頭 20 件の状態だけ使い、truncated と warning を返す", async () => {
-      const projects = Array.from({ length: 25 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+    it("参加プロジェクトが 100 を超えたら、先頭 100 件の状態だけ使い、truncated と warning を返す", async () => {
+      const projects = Array.from({ length: 105 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
       const statuses = Object.fromEntries(
         projects.map((p) => [`GET /projects/${p.projectKey}/statuses`, STANDARD]),
       );
       const r = await run({}, { "GET /projects": projects, ...statuses, "GET /issues": [] });
-      expect(r.calls.filter((c) => c.endsWith("/statuses"))).toHaveLength(20);
+      expect(r.calls.filter((c) => c.endsWith("/statuses"))).toHaveLength(100);
       expect(r.json.analysis.truncated).toBe(true);
       expect(r.json.warnings.map((w: { code: string }) => w.code)).toEqual([
         "status_projects_truncated",
@@ -406,12 +406,12 @@ describe("my_tasks", () => {
     expect(r.json.error.code).toBe("permission_error");
   });
 
-  describe("API 呼び出し数(最悪ケース = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 20 + 10 + 10 + 10)", () => {
-    it("maxApiCalls は 52", () => {
-      expect(myTasks.maxApiCalls).toBe(52);
+  describe("API 呼び出し数(最悪ケース = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 100 + 10 + 10 + 10)", () => {
+    it("maxApiCalls は 132", () => {
+      expect(myTasks.maxApiCalls).toBe(132);
     });
-    it("プロジェクト 20 件で 3 つとも上限まで続いても 52 回で止まり、truncated と警告が出る", async () => {
-      const projects = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+    it("プロジェクト 100 件で 3 つとも上限まで続いても 132 回で止まり、truncated と警告が出る", async () => {
+      const projects = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
       const statuses = Object.fromEntries(
         projects.map((p) => [`GET /projects/${p.projectKey}/statuses`, STANDARD]),
       );
@@ -425,7 +425,7 @@ describe("my_tasks", () => {
         },
       );
       expect(r.isError, r.text).toBe(false);
-      expect(r.calls).toHaveLength(52);
+      expect(r.calls).toHaveLength(132);
       expect(r.json.analysis.truncated).toBe(true);
       expect(r.json.warnings.map((w: { code: string }) => w.code)).toEqual([
         "overdue_truncated",

@@ -30,6 +30,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - **upstream / 下流モデル**(ADR 0011): このリポジトリは upstream で、`wrangler.jsonc` はローカル開発・テスト用のダミー値の共有設定(`env` ブロックなし)。アカウント固有の値(Worker 名・KV id・ドメイン・Backlog スペース・client id/secret)は**追跡ファイルに書かない**。デプロイは `mise run deploy:render` が `LOGBUTLER_*` 環境変数から gitignore 済みの `wrangler.deploy.jsonc` を生成し、`wrangler deploy -c` する(`mise.local.toml` の `[env]` / GitHub の Variables)。`wrangler.jsonc` のトップレベル(`compatibility_date` など)を変えれば下流に pull で届く。生成項目を足したら `scripts/render-wrangler-config/core.ts`・unit・E2E・runbook を更新する。
 - GitHub Actions は**コミット SHA で固定**する(`.github/workflows/ci.yml`)。更新時は `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で実在を確かめる。
 - **親子課題(3 階層目)**(ADR 0015): Backlog の `err.editIssue.parentChildIssue.N`(HTTP 400・code=7)は `BacklogApiError` の生成点(`src/backlog/errors.ts`)で `argument_error` に変換する。`issue_update` の `engagement` は、対象が案件の親課題そのもの・祖先(最大 2 段)に案件の親課題がいれば親を変えない。`issue_list` の `include_descendants` は子の ID を集めて「親 ∪ 子」で 1 回取る(親 + 子は 200 ID まで、超えたら `argument_error`)。プロジェクトの設定は `grandchildIssueEnabled`(`logbutler_project_get`)で、孫の有無はこの設定では決め打ちしない。
+- **状態一覧のキャッシュ・課題削除・要約**(ADR 0016): 状態一覧(`my_tasks` と `issue_list` の `status_id=not-closed` が使う)は `OAUTH_KV` の `statuses:<backlogUserId>` に 600 秒キャッシュする(`src/analysis/status-cache.ts`。`ToolContext.statusCache` は任意で、未設定ならキャッシュなし。KV の失敗・壊れた値は無視。`status_add` / `status_update` / `status_delete` 成功時にそのユーザーの値を消す)。上限は `MAX_STATUS_PROJECTS` = 100 で、`maxApiCalls` は `my_tasks` 132・`issue_list` 204(`API_BUDGET`)。`issue_list` の `detail=summary` は description なしの要約をエンベロープで返す(既定の `full` は生の配列)。`logbutler_issue_delete` は `confirm_issue_key` が `issue_key` と完全一致しなければ Backlog を呼ばずに `argument_error`。
 - ツール名の接頭辞は `logbutler_`。
 - **状態・設定の ID を決め打ちしない**(ADR 0012)。テストも `meta_*` で取得するか、`project_settings` のツールでスイート自身が作る(実環境 E2E は名前に `[live <時刻>]` を付け、`afterAll` で必ず消す)。
 
@@ -47,7 +48,7 @@ src/mcp/api-handler.ts        /mcp の下流。Backlog 401 を HTTP 401 に変�
 src/mcp/server.ts             McpServer のファクトリ(リクエストごとに生成)
 src/mcp/response-limit.ts    応答サイズの上限(推定トークン数。ADR 0007)
 src/mcp/args.ts              ツール共通の引数処理(zod ビルダー・ID 解決・日付・CSV・パスのエスケープ)
-src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)、公式 MCP 由来の通知系 2 個は `notification.ts`、`project_users` は `project.ts`、プロジェクト設定 12 個(カテゴリー・バージョン・状態・カスタム属性の add / update / delete。toolset `project_settings`。既定で公開、`read_only=true` で隠れる。ADR 0013)は `project-settings.ts`
+src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)、公式 MCP 由来の通知系 2 個は `notification.ts`、`project_users` は `project.ts`、課題の書き込み系(`issue_delete` を含む)は `issue-write.ts`、プロジェクト設定 12 個(カテゴリー・バージョン・状態・カスタム属性の add / update / delete。toolset `project_settings`。既定で公開、`read_only=true` で隠れる。ADR 0013)は `project-settings.ts`
 src/config-check.ts          起動時の設定チェック(ADR 0010)。src/index.ts が OAuthProvider の前に呼ぶ
 scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oauth`)。core.ts(Web 標準 API だけ。入出力は VerifyIo で注入)・args.ts・loopback.ts(node:http)・main.ts(Node 24 の型ストリップで直接実行。TS の enum / parameter property は使わない)
 .github/workflows/ci.yml     lint / test / deploy:check(アクションは SHA 固定)
@@ -56,6 +57,7 @@ scripts/render-wrangler-config/  wrangler.jsonc + LOGBUTLER_* → wrangler.deplo
 .claude/skills/logbutler-setup/SKILL.md  下流リポジトリのセットアップ案内スキル(`.agents/skills/` から symlink)
 docs/runbook.md  docs/manual-verification.md   デプロイ・運用の手順書と、未検証の前提の実機確認リスト(ADR の「未検証の前提」から V01〜 / P1〜 でリンクしている)
 src/analysis/open-statuses.ts   「未完了」の状態 ID をプロジェクトの状態一覧(完了集合以外)から決める(ADR 0012。状態 ID を決め打ちしない)
+src/analysis/status-cache.ts  状態一覧の KV キャッシュ(`statuses:<ユーザーID>`、600 秒。ADR 0016)
 src/analysis/                 分析系の加工ロジック(M05)。envelope.ts(AnalysisEnvelope・warning)・dates.ts(タイムゾーンの日付境界)・issues.ts(課題の全件取得)・budget.ts(ツールごとの maxApiCalls)・statuses.ts(完了集合)・activity-range.ts(期間つきのアクティビティ取得。maxId を必ず進める)・snippet.ts(コードポイント単位の抜粋)と、ツールごとの関数(digest 系は DigestEnvelope)
 src/backlog/client.ts         Backlog API クライアント(request / download。本文の読み取りも同じ期限)
 test/unit/  test/e2e/  test/helpers/(tool-call.ts: 実クライアント + モック fetch でツールを呼ぶ)  test/fixtures/(logvalet の tools/list baseline。コピー元は README)  test/snapshots/(tools/list のスナップショット)

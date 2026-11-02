@@ -74,7 +74,7 @@ export async function buildMyTasks(ctx: ToolContext, args: { mode?: string; stal
   const today = ymdIn(now, tz);
   const range = dateRangeFor(mode, today);
   // 未完了 = 完了集合以外の状態(カスタム状態を含む)。ID は参加プロジェクトの状態一覧から決める(ADR 0012)。
-  const open = await collectOpenStatusIds(ctx.client);
+  const open = await collectOpenStatusIds(ctx);
   warnings.push(...open.warnings);
   if (open.truncated) truncated = true;
   const assignee = { assigneeId: [myself.id], statusId: open.ids };

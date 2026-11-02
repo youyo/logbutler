@@ -180,6 +180,14 @@ mise run verify:oauth -- $BASE/mcp --refresh-only                      # 保存�
 - 期待結果: いずれも `isError` でなく、Backlog の生データ(camelCase)または加工済みデータ(snake_case)が返る。`read_only=true` では書き込み系(`issue_create` など)が一覧に出ない。
 - 結果: 呼んだツール [ ] ／ 失敗 [ なし / ] ／ 判定 [ OK / NG ] ／ メモ:
 
+### V17 状態一覧のキャッシュが空のときの 100 プロジェクトでの所要時間
+
+- 出典: [ADR 0016](adr/0016-issue-2-feedback.md)
+- 目的: `my_tasks` と `issue_list`(`status_id=not-closed`)は、状態一覧を最大 100 プロジェクト分、直列に引く。KV のキャッシュ(600 秒)が空のとき、Workers の実行時間と Backlog のレート制限の範囲で終わるか。
+- 手順: 参加プロジェクトが 21 以上(できれば 100 近く)のスペースで、600 秒以上あけてから `logbutler_my_tasks`、続けて `logbutler_issue_list`(`status_id=not-closed`、プロジェクト指定なし)を呼ぶ。1 回目(キャッシュが空)と 2 回目(600 秒以内)の所要時間と、`truncated` / `status_projects_truncated` の有無を記録する。`status_add` などで状態を変えた直後の呼び出しが、変更を反映することも確かめる。
+- 期待結果: 1 回目は数十秒以内にタイムアウトや 429 なしで終わる。2 回目はほぼ KV の 1 回だけで、数秒以内。101 以上のスペースでは従来どおり truncated / `argument_error`。
+- 結果: プロジェクト数 [ ] ／ 1 回目 [ ] 秒 ／ 2 回目 [ ] 秒 ／ 判定 [ OK / 要対応 ] ／ メモ:
+
 ## D. 運用(ADR 0009 / 0010)
 
 ### V15 設定チェックとログにトークンが出ないこと
@@ -276,4 +284,5 @@ Logbutler 本体(src)は長さを検証せず、Backlog の応答(`api_error` �
 | V14 | 読み取りツールが実 Backlog で動く | ロードマップ M07 |
 | V15 | 設定チェック・ログにトークンが出ない | ADR 0010 |
 | V16 | 匿名 `/register` への対策 | ADR 0009 |
+| V17 | 状態一覧キャッシュが空のときの 100 プロジェクトでの所要時間 | ADR 0016 |
 | P1〜P5 | Portal を使う場合の (a)〜(e) | ADR 0002 / 0008 / 0009 |

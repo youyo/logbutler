@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import type { StatusCacheDeps } from "../../src/analysis/status-cache";
 import { createBacklogClient } from "../../src/backlog/client";
 import type { IdempotencyDeps } from "../../src/mcp/idempotency";
 import { createMcpServer } from "../../src/mcp/server";
@@ -56,6 +57,8 @@ export async function callTool(
     timezone?: string;
     /** WriteNonIdempotent の冪等キャッシュ(省略時はキャッシュなし)。 */
     idempotency?: IdempotencyDeps;
+    /** 状態一覧の KV キャッシュ(ADR 0016。省略時はキャッシュなし)。 */
+    statusCache?: StatusCacheDeps;
     /** tools/call の params._meta。 */
     meta?: Record<string, unknown>;
   } = {},
@@ -88,6 +91,7 @@ export async function callTool(
         now: opts.now ? () => opts.now as Date : undefined,
         timezone: opts.timezone,
         idempotency: opts.idempotency,
+        statusCache: opts.statusCache,
       }),
     "tools/call",
     { name, arguments: args, ...(opts.meta ? { _meta: opts.meta } : {}) },

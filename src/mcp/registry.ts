@@ -4,6 +4,7 @@
  */
 import type { McpServer, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import type { z } from "zod";
+import type { StatusCacheDeps } from "../analysis/status-cache";
 import { type BacklogClient, BacklogUnauthorizedError } from "../backlog/client";
 import { ArgumentError, LogbutlerError, QueryError, toErrorEnvelope } from "../errors";
 import { assertTimezone } from "./args";
@@ -96,6 +97,8 @@ export interface ToolContext {
   timezone: string;
   /** Backlog スペースのホスト(例 `example.backlog.com`)。分析系の出力の `space` / `base_url` の材料。 */
   spaceHost: string;
+  /** 状態一覧の KV キャッシュ(ADR 0016)。未設定ならキャッシュなし。 */
+  statusCache?: StatusCacheDeps;
 }
 
 export interface ToolDefinitionInput<S extends z.ZodObject> {
@@ -277,6 +280,8 @@ export interface RegisterDeps {
   timezone?: string;
   /** WriteNonIdempotent ツールの冪等キャッシュ(KV とユーザー ID)。省略時はキャッシュしない。 */
   idempotency?: IdempotencyDeps;
+  /** 状態一覧の KV キャッシュ(`statuses:<ユーザーID>`。ADR 0016)。省略時はキャッシュしない。 */
+  statusCache?: StatusCacheDeps;
 }
 
 function textResult(text: string, isError = false) {
@@ -349,6 +354,7 @@ export function registerTools(
           const toolCtx: ToolContext = {
             client,
             spaceHost: deps.spaceHost ?? "",
+            ...(deps.statusCache ? { statusCache: deps.statusCache } : {}),
             now: deps.now ?? (() => new Date()),
             timezone:
               typeof tzArg === "string" ? assertTimezone(tzArg) : deps.timezone || DEFAULT_TIMEZONE,

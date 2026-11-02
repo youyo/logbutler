@@ -5,7 +5,7 @@ Cloudflare Workers 上で動き、利用者ごとに自分の Backlog アカウ�
 前段に Cloudflare MCP Server Portals を置いても、MCP クライアントから直接つないでもよい(Logbutler は DCR 対応の OAuth 付き MCP サーバーとして振る舞う)。
 
 Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Remote MCP 機能を TypeScript に移植したもので、
-**86 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
+**87 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
 
 > **商標について**: Backlog は株式会社ヌーラボの登録商標です。Logbutler は個人プロジェクトであり、株式会社ヌーラボとは無関係です。
 
@@ -21,7 +21,7 @@ MCP クライアント(Portal など)
    │  /register(DCR) /token /mcp /.well-known/*
    ▼
 ┌───────────────────────── Logbutler(Cloudflare Worker) ─────────────────────────┐
-│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(86 ツール)       │
+│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(87 ツール)       │
 │       │                                              │                           │
 │       │ /authorize /callback /healthz (Hono)          └─▶ Backlog API(利用者のトークン) │
 │       ▼                                                                          │
@@ -49,13 +49,13 @@ MCP クライアント(Portal など)
 - [デプロイと運用の手順書](docs/runbook.md)(Backlog の OAuth アプリ登録、KV・ドメイン・secrets・デプロイ、運用)
 - [実機確認リスト](docs/manual-verification.md)(実デプロイしていないため未検証の前提と、その確認手順・記入欄)
 
-## ツール(86 個)
+## ツール(87 個)
 
 `toolsets` で絞り込める(下の「接続 URL のクエリ」)。書き込み・破壊的ツールは `read_only=true` で非公開にできる。`project_settings`(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除。Backlog の管理者権限が必要)も既定で公開され、`read_only=true` で隠れる(ADR 0013)。
 
 | toolset | 件数 | ツール(接頭辞 `logbutler_` を省略) |
 |---|---|---|
-| `issue` | 14 | `issue_get` `issue_list` `issue_comment_list` `issue_attachment_list` `issue_attachment_download` `issue_related_list` `issue_create` `issue_update` `issue_comment_add` `issue_comment_update` `issue_related_add` `issue_related_delete` `issue_attachment_delete` `issue_attachment_upload` |
+| `issue` | 15 | `issue_get` `issue_list` `issue_comment_list` `issue_attachment_list` `issue_attachment_download` `issue_related_list` `issue_create` `issue_update` `issue_comment_add` `issue_comment_update` `issue_related_add` `issue_related_delete` `issue_attachment_delete` `issue_attachment_upload` `issue_delete` |
 | `project` | 4 | `project_get` `project_list` `project_conventions` `project_users` |
 | `user` | 3 | `user_me` `user_list` `user_get` |
 | `activity` | 2 | `activity_list` `user_activity` |
@@ -117,7 +117,7 @@ mise run dev            # wrangler dev
 | `toolsets` | `/mcp` の URL クエリ | 公開するツールのグループ(カンマ区切り、既定 `all`)。例 `/mcp?toolsets=issue,wiki`。`issue` `project` `user` `activity` `document` `team` `space` `meta` `shared_file` `star` `watching` `wiki` `analysis` `digest` `search` `notification` `project_settings` |
 | `read_only` | `/mcp` の URL クエリ | `true` で書き込み・破壊的ツールを公開しない(既定 `false`)。例 `/mcp?toolsets=issue&read_only=true` |
 | `timezone` | ツール引数 | 「今日」「今週」の基準になる IANA 名(省略時 `Asia/Tokyo`)。`issue_list` `my_tasks` `digest_daily` `digest_weekly` `activity_stats` `issue_timeline` `activity_digest` `user_activity` `digest_unified` にある |
-| `max_response_tokens` | ツール引数 | 応答サイズの安全網(推定トークン数。省略時 50000、`0` で無効)。超えると切り詰めずに `response_too_large`(`retryable: false`)のエラーを返す。読み取りツールにある(ダウンロード系 2 個を除く)。書き込み系は対象外。`issue_list` の count が大きいときや分析ツールで複数プロジェクトを指定したときは上限を超えうる。その場合は絞り込むか `max_response_tokens` を指定する。ADR 0007 |
+| `max_response_tokens` | ツール引数 | 応答サイズの安全網(推定トークン数。省略時 50000、`0` で無効)。超えると切り詰めずに `response_too_large`(`retryable: false`)のエラーを返す。読み取りツールにある(ダウンロード系 2 個を除く)。書き込み系は対象外。`issue_list` の count が大きいときや分析ツールで複数プロジェクトを指定したときは上限を超えうる。その場合は絞り込むか、`issue_list` の `detail=summary`(description なしの要約)にするか、`max_response_tokens` を指定する。ADR 0007 |
 
 不正なクエリ値(未知の toolset 名、`read_only` が `true`/`false` 以外)は 400 で、理由を本文に返す。公開されるツールが 0 個になる組み合わせ(`toolsets=project_settings&read_only=true`、`toolsets=star&read_only=true` など。書き込みだけの toolset を読み取り専用にした場合)も 400(ツールが 0 個だと MCP サーバーが tools capability を宣言せず、tools/list が 404 になるため)。不正な `timezone` は `argument_error`。
 
@@ -171,5 +171,5 @@ LOGBUTLER_LIVE_PROJECT_KEY=<書き込んでよいテスト用プロジェクト�
 - `LOGBUTLER_LIVE_PROJECT_KEY`(必須。未設定ならスイート全体が失敗する)。書き込みはこのプロジェクト内の、スイートが作った課題・ドキュメントにだけ行う(summary に `[live <実行時刻>]`)。
 - `LOGBUTLER_LIVE_STATE_FILE`(既定 `.verify-oauth.local.json`)。リフレッシュトークンは接続時に更新し、ローテーション後の値を同じファイルへ 0600 で書き戻す。実際の MCP クライアントと同じく、`/mcp` が 401 を返したら 1 回だけ更新して再試行する(2 回目も 401 ならエラー)。
 - 状態・プロジェクト設定(状態名・課題種別・優先度など)は実行時に `logbutler_meta_*` などで取得し、ID を決め打ちしない。
-- 課題・ドキュメントは削除しない(削除するツールがないため)。プロジェクト設定(カテゴリー・バージョン・状態・カスタム属性)は、スイートが `[live <実行時刻>]` つきで作ったものだけを追加 → 更新 → 削除し、失敗時も `afterAll` で消す。**Backlog の管理者権限が必要**。1 回の実行でおよそ 400 リクエスト。
+- ドキュメントは削除しない(削除するツールがないため)。課題の削除ツール(`issue_delete`)はあるが、スイートでは使っていないので、スイートが作った課題は残る。プロジェクト設定(カテゴリー・バージョン・状態・カスタム属性)は、スイートが `[live <実行時刻>]` つきで作ったものだけを追加 → 更新 → 削除し、失敗時も `afterAll` で消す。**Backlog の管理者権限が必要**。1 回の実行でおよそ 400 リクエスト。
 - 対象外: 共有ファイル系(2FA 設定時に別パスワードが必要)と Wiki 系(このスペースで有効化できない)。

@@ -53,7 +53,7 @@ describe("E2E 16: プロジェクト設定ツールの公開", () => {
     const { token } = await loggedIn();
     const names = await toolNames(token);
     for (const n of SETTINGS_TOOLS) expect(names, n).toContain(n);
-    expect(names).toHaveLength(86);
+    expect(names).toHaveLength(87);
   });
 
   it("toolsets=project_settings で、この 12 個だけになる", async () => {

@@ -46,8 +46,8 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 | `issue_list` の `include_descendants` | なし(`parent_issue_ids` は直下の子だけ) | 任意の真偽値(既定 false)。true で `parent_issue_ids` の子と孫を返す(子の ID を集めて「親 ∪ 子」で 1 回取る。親 + 子は 200 ID まで、超えたら `argument_error`)。既定の挙動は変わらない | 3 階層目の対応。ADR 0015。引数の追加は `ALLOWED_CHANGES` |
 | `issue_update` の `engagement`(`parent_issue_id` 省略時) | 常に案件の親課題を親にする | 対象が案件の親課題そのもの、または親・親の親が案件の親課題なら親を変えない(カテゴリだけ設定)。説明文を変更 | 孫課題を 2 階層目に引き上げない・自分自身を親にしない。ADR 0015。説明文の差分は `ALLOWED_CHANGES` |
 | 親子関係の制約違反(HTTP 400・code=7・`err.editIssue.parentChildIssue.N`) | `api_error` でそのまま | `argument_error`(理由・`grandchildIssueEnabled` の確認方法・元のキーを日本語で) | ADR 0015 |
-| `issue_list` の `status_id=not-closed` | ID `1,2,3` の決め打ち | 対象プロジェクト(`project_key` / `project_keys`。なければ参加プロジェクト)の `GET /projects/{key}/statuses` から、完了集合(`src/analysis/statuses.ts`)に入らない名前の状態 ID を集めて `statusId[]` に渡す(カスタム状態を含む。重複は 1 つ)。プロジェクトは 20 件まで(超えたら `argument_error`)。未完了の状態が 1 つもなければ空配列。`status_id` の説明文を変更 | 状態 ID はプロジェクトで可変。ADR 0012。説明文の差分は `ALLOWED_CHANGES` |
-| `my_tasks` の未完了 | overdue / upcoming は `statusId[]=1,2,3`、watching は `status.id = 4` を除く | 参加プロジェクト(`GET /projects?archived=false`)の状態一覧から、完了集合以外の ID を `statusId[]` に渡す(先頭 20 プロジェクトまで。超えたら `truncated` と warning `status_projects_truncated`)。watching は状態名が完了集合のものを除く。状態一覧の取得失敗は warning(`projects_fetch_failed` / `statuses_fetch_failed`)で、ID が決まらなければ `statusId` を送らず応答側で完了集合を除く。`maxApiCalls` は 52 | 全分析で未完了の定義を「完了集合以外」に統一。ADR 0012 |
+| `issue_list` の `status_id=not-closed` | ID `1,2,3` の決め打ち | 対象プロジェクト(`project_key` / `project_keys`。なければ参加プロジェクト)の `GET /projects/{key}/statuses` から、完了集合(`src/analysis/statuses.ts`)に入らない名前の状態 ID を集めて `statusId[]` に渡す(カスタム状態を含む。重複は 1 つ)。プロジェクトは 20 件まで(ADR 0016 で 100 件に更新。超えたら `argument_error`。状態一覧は KV に 600 秒キャッシュ)。未完了の状態が 1 つもなければ空配列。`status_id` の説明文を変更 | 状態 ID はプロジェクトで可変。ADR 0012。説明文の差分は `ALLOWED_CHANGES` |
+| `my_tasks` の未完了 | overdue / upcoming は `statusId[]=1,2,3`、watching は `status.id = 4` を除く | 参加プロジェクト(`GET /projects?archived=false`)の状態一覧から、完了集合以外の ID を `statusId[]` に渡す(先頭 100 プロジェクトまで(ADR 0016 で 20 から更新。状態一覧は KV に 600 秒キャッシュ)。超えたら `truncated` と warning `status_projects_truncated`)。watching は状態名が完了集合のものを除く。状態一覧の取得失敗は warning(`projects_fetch_failed` / `statuses_fetch_failed`)で、ID が決まらなければ `statusId` を送らず応答側で完了集合を除く。`maxApiCalls` は 132(ADR 0016) | 全分析で未完了の定義を「完了集合以外」に統一。ADR 0012 |
 | `document_tree`(ドキュメント 0 件) | Backlog の 404 をそのままエラー | 404 かつ本文が `ActiveRoot node not found` のときだけ、空の木 `{projectId, activeTree:{id:"Active",children:[]}, trashTree:{id:"Trash",children:[]}}` を返す(`projectId` は `GET /projects/{key}` で補う。存在しないプロジェクトならそこで `not_found`)。他の 404 は `not_found` | 2026-10-29 実 Backlog で、ドキュメントが 0 件のプロジェクトは 404 "ActiveRoot node not found"。木の形は [get-document-tree](https://developer.nulab.com/docs/backlog/api/2/get-document-tree/) |
 | `issue_attachment_upload` | `file_paths` でサーバー上のパスも受け取る | `file_paths` なし。base64 のみ。上限 4 MiB は**デコード後の実サイズ**で判定（ちょうど 4 MiB は通り、4 MiB + 1 は `argument_error`）。`file_name` が空・`.`・`..` なら `argument_error`。デコード後 0 バイト(`file_content_base64` が空)も `argument_error` | 推定 `(len/4)*3` は、ちょうど 4 MiB を誤って弾きうる。base64 長が上限の約 1.25 倍を超える入力はデコードせずに弾く。0 バイトは実 Backlog が `HTTP 400 code=1 Internal error` で拒否する(2026-10-29 実環境 E2E)ので、送る前に弾く |
 | MCP の POST 本文の上限 | 4 MiB 相当 | 8 MiB（`src/mcp/request-body.ts`）。超えたら 413 | 4 MiB のファイルを base64 にして JSON に入れると約 5.6 MB。agents の stateless ハンドラは `maxRequestBodySize` を 2025 年版プロトコルの判定に渡さず、4 MiB を超えると 400 になるため、本文を自前で読んで `parsedBody` を渡す |
@@ -235,7 +235,14 @@ M07 ではツールを足していない(プロジェクト設定 12 個は M07 
 | M05B(digest 系 6 + `user_activity`) | 7 | 71 | M05B |
 | M06(公式 MCP 由来) | 3 | 74 | M06 |
 | ADR 0013(プロジェクト設定) | 12 | 86 | プロジェクト設定ツール |
+| ADR 0016(課題の削除) | 1 | 87 | 下の「ADR 0016」 |
 
-- 86 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
+- 87 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個 + `issue_delete` 1 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
 - 全ツールの `tools/list`(description / inputSchema / annotations)は `test/snapshots/tools_list.json` に固定し、logvalet の baseline との差は `ALLOWED_CHANGES` / `ALLOWED_EXTRA` に理由つきで載せたものだけ(`test/helpers/baseline.ts`)。
 - 実機での確認が要る差分(`issue_create` の `priorityId`(確認済み・修正済み)、未公開 API `relatedIssues`、4 MiB アップロード)は [manual-verification.md](manual-verification.md) の V08・V09・V11。
+
+## ADR 0016: issue_list の `detail`・`issue_delete`
+
+- `logbutler_issue_delete`(新規。logvalet にない): `DELETE /issues/:issueIdOrKey`。`confirm_issue_key` が `issue_key` と完全一致しなければ Backlog を呼ばずに `argument_error`。
+- `logbutler_issue_list` の `detail`: 任意の文字列(`full` 既定 / `summary`、それ以外は `argument_error`)。`full` は logvalet と同じ Backlog の生の配列。`summary` は `analysisEnvelope`(resource `issue_list`)で `analysis` は `{ count, issues }`、各課題は `id` `issue_key` `project_key` `summary` `issue_type` `status` `priority` `assignee`(名前。なければ null)`start_date` `due_date` `parent_issue_id` `created` `updated` の snake_case(description は含めない)。引数の追加は `ALLOWED_CHANGES` に理由つき。
+- 状態一覧の上限は 20 → 100 プロジェクト(`my_tasks` の truncated、`issue_list` の `status_id=not-closed` の `argument_error` の閾値)。状態一覧は `OAUTH_KV` の `statuses:<ユーザーID>` に 600 秒キャッシュする。

@@ -397,6 +397,28 @@ export const issueAttachmentDelete = defineTool({
   },
 });
 
+export const issueDelete = defineTool({
+  name: "logbutler_issue_delete",
+  title: "課題削除",
+  description:
+    "Delete an issue permanently (cannot be undone; its comments, attachments and relations are lost too). confirm_issue_key must exactly equal issue_key",
+  category: "Destructive",
+  toolset: "issue",
+  inputSchema: z.object({
+    issue_key: reqStr("Issue key (e.g. PROJECT-123)"),
+    confirm_issue_key: reqStr("Must be exactly the same as issue_key; confirms the deletion"),
+  }),
+  handler: ({ issue_key, confirm_issue_key }, { client }) => {
+    // 取り消せない操作なので、Backlog を呼ぶ前に二重の指定で確かめる(ADR 0016)。
+    if (confirm_issue_key !== issue_key) {
+      throw new ArgumentError(
+        "confirm_issue_key must exactly match issue_key to delete the issue (nothing was deleted)",
+      );
+    }
+    return client.request("DELETE", `/issues/${seg(issue_key)}`);
+  },
+});
+
 /** インライン base64 の上限（デコード後）。logvalet と同じ 4 MiB。 */
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 

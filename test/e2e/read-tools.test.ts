@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, mockOutboundFetch } from "../helpers/mock-fetch";
 import {
   BACKLOG_HOST,
@@ -13,6 +14,11 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+// 状態一覧の KV キャッシュ(ADR 0016)はテスト間で残るので、毎回空にしてから始める。
+beforeEach(async () => {
+  await env.OAUTH_KV.delete("statuses:42");
 });
 
 const API = `${BACKLOG_HOST}/api/v2`;
@@ -72,6 +78,58 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
       "/api/v2/projects/PROJ/statuses",
       "/api/v2/issues",
     ]);
+  });
+
+  it("issue_list(detail=summary): OAuth 済みの /mcp で、description なしの要約をエンベロープで返す。detail 省略は Backlog の生の配列(ADR 0016)", async () => {
+    const raw = {
+      id: 7,
+      issueKey: "PROJ-7",
+      summary: "要約テスト",
+      description: "とても長い本文",
+      issueType: { id: 2, name: "バグ" },
+      status: { id: 1, name: "未対応" },
+      priority: { id: 3, name: "中" },
+      assignee: null,
+      startDate: null,
+      dueDate: "2026-11-01T00:00:00Z",
+      parentIssueId: 5,
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-02T00:00:00Z",
+    };
+    const { token } = await loggedIn({ [`GET ${API}/issues`]: () => jsonResponse([raw]) });
+
+    const full = await readRpc(await call(token, "logbutler_issue_list", {}));
+    expect(JSON.parse(firstText(full))).toEqual([raw]);
+
+    const summary = await readRpc(await call(token, "logbutler_issue_list", { detail: "summary" }));
+    expect(summary.result?.isError, firstText(summary)).toBeFalsy();
+    const body = JSON.parse(firstText(summary));
+    expect(body).toMatchObject({ schema_version: "1", resource: "issue_list", warnings: [] });
+    expect(body.analysis).toEqual({
+      count: 1,
+      issues: [
+        {
+          id: 7,
+          issue_key: "PROJ-7",
+          project_key: "PROJ",
+          summary: "要約テスト",
+          issue_type: "バグ",
+          status: "未対応",
+          priority: "中",
+          assignee: null,
+          start_date: null,
+          due_date: "2026-11-01T00:00:00Z",
+          parent_issue_id: 5,
+          created: "2026-01-01T00:00:00Z",
+          updated: "2026-01-02T00:00:00Z",
+        },
+      ],
+    });
+    expect(firstText(summary)).not.toContain("とても長い本文");
+
+    const bad = await readRpc(await call(token, "logbutler_issue_list", { detail: "tiny" }));
+    expect(bad.result?.isError).toBe(true);
+    expect(JSON.parse(firstText(bad)).error.code).toBe("argument_error");
   });
 
   it("issue_list(not-closed・プロジェクト指定なし): 参加プロジェクトの状態一覧から、重複を除いた完了集合以外の ID を使う", async () => {
@@ -236,7 +294,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
 
     const all = await list();
     expect(await list("all")).toEqual(all);
-    expect(all).toHaveLength(38 + 15 + 11 + 7 + 3 + 12); // M03 の読み取り 38 + M04 の書き込み 14 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12
+    expect(all).toHaveLength(38 + 16 + 11 + 7 + 3 + 12); // M03 の読み取り 38 + M04 の書き込み 14 + ADR 0016 の issue_delete 1 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12
     expect(all).toContain("logbutler_issue_list");
 
     const wikiOnly = await list("wiki");
@@ -256,6 +314,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
         "logbutler_issue_comment_list",
         "logbutler_issue_comment_update",
         "logbutler_issue_create",
+        "logbutler_issue_delete",
         "logbutler_issue_get",
         "logbutler_issue_list",
         "logbutler_issue_related_add",

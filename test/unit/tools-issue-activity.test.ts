@@ -390,8 +390,8 @@ describe("issue_list", () => {
       });
     });
 
-    it("プロジェクトが 20 を超える(指定なし)と argument_error(project_key で絞るよう促す)。課題一覧は呼ばない", async () => {
-      const projects = Array.from({ length: 21 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
+    it("プロジェクトが 100 を超える(指定なし)と argument_error(project_key で絞るよう促す)。課題一覧は呼ばない", async () => {
+      const projects = Array.from({ length: 101 }, (_, i) => ({ id: i + 1, projectKey: `P${i}` }));
       const run = await callTool(
         "logbutler_issue_list",
         { status_id: "not-closed" },
@@ -403,8 +403,8 @@ describe("issue_list", () => {
       expect(run.calls).toEqual(["GET /projects?archived=false"]);
     });
 
-    it("project_keys が 20 を超えると Backlog を呼ぶ前に argument_error", async () => {
-      const keys = Array.from({ length: 21 }, (_, i) => `P${i}`).join(",");
+    it("project_keys が 100 を超えると Backlog を呼ぶ前に argument_error", async () => {
+      const keys = Array.from({ length: 101 }, (_, i) => `P${i}`).join(",");
       const run = await callTool(
         "logbutler_issue_list",
         { project_keys: keys, status_id: "not-closed" },
@@ -649,8 +649,109 @@ describe("issue_list", () => {
       expect(run.calls).not.toContain("GET /issues");
     });
 
-    it("maxApiCalls は 52 = 従来の既定 50(プロジェクト・担当者・状態の解決と最後の一覧) + 子の収集 2 ページ(合計 200 ID で打ち切るため 3 ページ目はない)", () => {
-      expect(issueList.maxApiCalls).toBe(52);
+    it("maxApiCalls は 204 = GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 ページ(合計 200 ID で打ち切るため 3 ページ目はない) + 一覧 1(ADR 0016)", () => {
+      expect(issueList.maxApiCalls).toBe(204);
+    });
+  });
+
+  describe("detail(full / summary。ADR 0016)", () => {
+    const NOW = new Date("2026-10-28T15:30:00Z");
+    const raw = (n: number, over: Record<string, unknown> = {}) => ({
+      ...issue,
+      id: n,
+      issueKey: `PROJ-${n}`,
+      summary: `課題${n}`,
+      description: "長い本文".repeat(100),
+      parentIssueId: null,
+      ...over,
+    });
+    const list = (args: Record<string, unknown>, respond: Parameters<typeof callTool>[2]) =>
+      callTool("logbutler_issue_list", args, respond, { now: NOW });
+
+    it("省略・full は Backlog の生の配列のまま(既定は変えない)", async () => {
+      const issues = [raw(1)];
+      for (const args of [{}, { detail: "full" }]) {
+        const run = await list(args, { "GET /issues": issues });
+        expect(run.isError, run.text).toBe(false);
+        expect(run.json).toEqual(issues);
+        expect(run.calls).toEqual(["GET /issues"]);
+      }
+    });
+
+    it("summary は analysisEnvelope(resource issue_list)で、analysis は { count, issues }。各課題は決まったキーだけ(description なし)", async () => {
+      const run = await list(
+        { detail: "summary" },
+        {
+          "GET /issues": [
+            raw(1, { parentIssueId: 99, startDate: "2026-10-01T00:00:00Z" }),
+            raw(2, { assignee: null, dueDate: null }),
+          ],
+        },
+      );
+      expect(run.isError, run.text).toBe(false);
+      expect(run.calls).toEqual(["GET /issues"]); // Backlog への問い合わせは full と同じ
+      expect(run.json).toMatchObject({
+        schema_version: "1",
+        resource: "issue_list",
+        generated_at: NOW.toISOString(),
+        space: "example",
+        warnings: [],
+      });
+      expect(run.json.analysis.count).toBe(2);
+      expect(run.json.analysis.issues[0]).toEqual({
+        id: 1,
+        issue_key: "PROJ-1",
+        project_key: "PROJ",
+        summary: "課題1",
+        issue_type: "バグ",
+        status: "未対応",
+        priority: "中",
+        assignee: "Bob",
+        start_date: "2026-10-01T00:00:00Z",
+        due_date: "2026-11-01T00:00:00Z",
+        parent_issue_id: 99,
+        created: "2026-01-01T00:00:00Z",
+        updated: "2026-01-02T00:00:00Z",
+      });
+      expect(run.json.analysis.issues[1]).toMatchObject({
+        assignee: null,
+        due_date: null,
+        start_date: null,
+        parent_issue_id: null,
+      });
+      expect(run.text).not.toContain("長い本文");
+      expect(run.text.length).toBeLessThan(JSON.stringify([raw(1), raw(2)]).length);
+    });
+
+    it("summary: 0 件でも count 0 のエンベロープ", async () => {
+      const run = await list({ detail: "summary" }, { "GET /issues": [] });
+      expect(run.json.analysis).toEqual({ count: 0, issues: [] });
+      expect(run.json.resource).toBe("issue_list");
+    });
+
+    it("summary + not-closed で未完了の状態がないときの空結果も、配列でなくエンベロープ(full は従来どおり空配列)", async () => {
+      const respond = {
+        "GET /projects/PROJ": { id: 10 },
+        "GET /projects/PROJ/statuses": [{ id: 4, name: "完了" }],
+      };
+      const summary = await list(
+        { detail: "summary", project_key: "PROJ", status_id: "not-closed" },
+        respond,
+      );
+      expect(summary.json).toMatchObject({ schema_version: "1", resource: "issue_list" });
+      expect(summary.json.analysis).toEqual({ count: 0, issues: [] });
+      expect(summary.calls).not.toContain("GET /issues");
+      const full = await list({ project_key: "PROJ", status_id: "not-closed" }, respond);
+      expect(full.json).toEqual([]);
+    });
+
+    it("full / summary 以外は Backlog を呼ぶ前に argument_error", async () => {
+      for (const detail of ["brief", "FULL", ""]) {
+        const run = await list({ detail }, {});
+        expect(run.isError, detail).toBe(true);
+        expect(run.json.error.code, detail).toBe("argument_error");
+        expect(run.calls, detail).toEqual([]);
+      }
     });
   });
 

@@ -4,7 +4,9 @@ export class FakeKv {
   gets: string[] = [];
   puts: string[] = [];
   failGet = false;
+  deletes: string[] = [];
   failPut = false;
+  failDelete = false;
 
   async get(key: string): Promise<string | null> {
     this.gets.push(key);
@@ -16,5 +18,11 @@ export class FakeKv {
     this.puts.push(key);
     if (this.failPut) throw new Error("KV put failed");
     this.store.set(key, { value, expirationTtl: options?.expirationTtl });
+  }
+
+  async delete(key: string): Promise<void> {
+    this.deletes.push(key);
+    if (this.failDelete) throw new Error("KV delete failed");
+    this.store.delete(key);
   }
 }
