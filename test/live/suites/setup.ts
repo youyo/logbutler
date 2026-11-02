@@ -84,12 +84,12 @@ export function setupSuite(): void {
       expect(w.meId).toBeGreaterThan(0);
     });
 
-    it("tools/list: 86 個で、スナップショットと名前が一致する", async () => {
+    it("tools/list: 87 個で、スナップショットと名前が一致する", async () => {
       const w = world();
       const r = await w.client.listTools();
       expect(r.status).toBe(200);
       const names = (r.body.result.tools as Array<{ name: string }>).map((t) => t.name).sort();
-      expect(names).toHaveLength(86);
+      expect(names).toHaveLength(87);
       expect(names).toEqual(w.snapshotTools.map((t) => t.name).sort());
     });
 

@@ -13,15 +13,15 @@
 未完了 = **完了集合に入らない名前の状態**。ID は固定せず、プロジェクトの状態一覧(`GET /projects/{key}/statuses`)から集める。状態 ID はスペース内で重複しうるので集合(挿入順)にする。
 
 - `my_tasks`: 参加プロジェクト(`GET /projects?archived=false`)の状態一覧を 1 件ずつ引き、完了集合以外の ID を overdue / upcoming の `statusId[]` に渡す。watching は状態名が完了集合のものを除く。
-  - プロジェクトは先頭 `MAX_STATUS_PROJECTS`(20)件まで。超えたら `truncated: true` と warning `status_projects_truncated`。
+  - プロジェクトは先頭 `MAX_STATUS_PROJECTS`(20。**ADR 0016 で 100 に更新**)件まで。超えたら `truncated: true` と warning `status_projects_truncated`。
   - 一覧の取得失敗は warning(`projects_fetch_failed` / `statuses_fetch_failed`)で続ける。ID が 1 つも決まらなければ `statusId` を送らず、応答側で完了集合の課題を除いて補う(overdue / upcoming は常に応答側でも除く)。
-  - `maxApiCalls` = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 20 + overdue / upcoming / watching 各 10 ページ = **52**。
+  - `maxApiCalls` = GetMyself 1 + プロジェクト一覧 1 + 状態一覧 20 + overdue / upcoming / watching 各 10 ページ = **52**(**ADR 0016 で 132 に更新**)。
 - `issue_list` の `status_id=not-closed`:
-  - `project_key` / `project_keys` があればそのプロジェクトの状態一覧だけを引く(プロジェクト数は 20 まで。超えたら Backlog を呼ぶ前に `argument_error`)。
-  - **プロジェクト指定なし**は参加プロジェクトすべて。20 を超えたら `argument_error`(`project_key` で絞るか数値の `status_id` を使うよう促す)。`issue_list` は Backlog の生の配列を返すので `truncated` / warning を載せる場所がなく、黙って一部の状態だけで絞るより、明示的に失敗させる。
+  - `project_key` / `project_keys` があればそのプロジェクトの状態一覧だけを引く(プロジェクト数は 20 まで。**ADR 0016 で 100 に更新**。超えたら Backlog を呼ぶ前に `argument_error`)。
+  - **プロジェクト指定なし**は参加プロジェクトすべて。20(**ADR 0016 で 100 に更新**)を超えたら `argument_error`(`project_key` で絞るか数値の `status_id` を使うよう促す)。`issue_list` は Backlog の生の配列を返すので `truncated` / warning を載せる場所がなく、黙って一部の状態だけで絞るより、明示的に失敗させる。
   - 未完了の状態が 1 つもなければ(参加プロジェクトなし・全状態が完了集合)課題一覧を呼ばず空配列を返す。
   - 状態一覧の取得失敗はツールエラー(ID を決め打ちに戻さない)。
-  - 最悪ケースの呼び出し: 指定ありは GetProject 20 + (assignee `me` の GetMyself 1)+ 状態一覧 20 + 課題 1 = 42、指定なしは 1 + 20 + 1(+1)= 23。いずれもクライアントの既定(50)以内なので `maxApiCalls` は明示しない。
+  - 最悪ケースの呼び出し: 指定ありは GetProject 20 + (assignee `me` の GetMyself 1)+ 状態一覧 20 + 課題 1 = 42、指定なしは 1 + 20 + 1(+1)= 23。いずれもクライアントの既定(50)以内なので `maxApiCalls` は明示しない。**ADR 0016 で上限が 100 になり、最悪ケースは 204 になったため `maxApiCalls` を明示した。状態一覧は KV に 600 秒キャッシュする。**
   - 数値の `status_id`(CSV)はこれまでどおりそのまま渡す(状態一覧は引かない)。`exclude_status` を持つ他の分析ツールは変更なし。
 - `status_id` の説明文を実態に合わせて変更した(logvalet の baseline との差分は `test/helpers/baseline.ts` の `ALLOWED_CHANGES`)。
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { MAX_STATUS_PROJECTS } from "../../analysis/budget";
+import { API_BUDGET, MAX_STATUS_PROJECTS } from "../../analysis/budget";
+import { analysisEnvelope } from "../../analysis/envelope";
+import { extractProjectKey } from "../../analysis/issue-detail";
 import { resolveNotClosedStatusIds } from "../../analysis/open-statuses";
 import type { BacklogClient } from "../../backlog/client";
 import { fetchByOffset } from "../../backlog/paging";
@@ -67,14 +69,51 @@ async function collectChildIds(client: BacklogClient, parents: number[]): Promis
   return items.map((i) => i.id);
 }
 
+/** issue_list の応答形式。full は Backlog の生の配列(既定)、summary は要約(ADR 0016)。 */
+const LIST_DETAILS = ["full", "summary"] as const;
+
+interface ListedIssue {
+  id: number;
+  issueKey: string;
+  summary: string;
+  issueType?: { name?: string } | null;
+  status?: { name?: string } | null;
+  priority?: { name?: string } | null;
+  assignee?: { name?: string } | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  parentIssueId?: number | null;
+  created?: string;
+  updated?: string;
+}
+
+/** detail=summary の 1 件(snake_case。description は含めない。本文は issue_get で取る)。 */
+function summarizeIssue(i: ListedIssue) {
+  return {
+    id: i.id,
+    issue_key: i.issueKey,
+    project_key: extractProjectKey(i.issueKey ?? ""),
+    summary: i.summary,
+    issue_type: i.issueType?.name ?? "",
+    status: i.status?.name ?? "",
+    priority: i.priority?.name ?? "",
+    assignee: i.assignee?.name ?? null,
+    start_date: i.startDate ?? null,
+    due_date: i.dueDate ?? null,
+    parent_issue_id: i.parentIssueId ?? null,
+    created: i.created ?? "",
+    updated: i.updated ?? "",
+  };
+}
+
 export const issueList = defineTool({
   name: "logbutler_issue_list",
   title: "課題一覧取得",
   description: "List issues with optional filters, including parent issue filtering",
   category: "ReadOnly",
   toolset: "issue",
-  // 従来の既定 50(プロジェクト・担当者・状態の解決と最後の一覧)+ 子の収集 2 ページ(親 + 子 ≦ 200 ID で打ち切るので 3 ページ目はない。ADR 0015)
-  maxApiCalls: 52,
+  // GetProject 100 + GetMyself 1 + 状態一覧 100 + 子の収集 2 ページ(親 + 子 ≦ 200 ID で打ち切るので 3 ページ目はない。ADR 0015)+ 一覧 1 = 204(キャッシュが空の最悪ケース。ADR 0016)
+  maxApiCalls: API_BUDGET.issueList,
   inputSchema: z.object({
     project_key: optStr("Filter by single project key (legacy; use project_keys for multiple)"),
     project_keys: optStr("Comma-separated project keys (e.g. PROJ1,PROJ2)"),
@@ -101,10 +140,25 @@ export const issueList = defineTool({
     include_descendants: optBool(
       `If true (requires parent_issue_ids), also return the grandchild issues: the children of the given parents and their children. Default false returns only direct children. At most ${MAX_DESCENDANT_QUERY_IDS} issue IDs (parents + children) are supported; beyond that an argument_error is returned. The other filters, count, offset and sort apply to the combined result`,
     ),
+    detail: optStr(
+      "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
+    ),
     timezone: timezoneArg(),
   }),
-  handler: async (a, { client, now, timezone }) => {
+  handler: async (a, ctx) => {
+    const { client, now, timezone, statusCache } = ctx;
     // 入力の検証は、Backlog を呼ぶ前にすべて済ませる。
+    if (a.detail !== undefined && !(LIST_DETAILS as readonly string[]).includes(a.detail)) {
+      throw new ArgumentError(`detail must be "full" or "summary", got "${a.detail}"`);
+    }
+    const summary = a.detail === "summary";
+    const respond = (issues: ListedIssue[]) =>
+      summary
+        ? analysisEnvelope(ctx, "issue_list", {
+            count: issues.length,
+            issues: issues.map(summarizeIssue),
+          })
+        : issues;
     const count = boundedCount("count", a.count);
     const status = a.status_id ? resolveStatusIds(a.status_id) : undefined;
     const parents = parseCsvInts("parent_issue_ids", a.parent_issue_ids);
@@ -142,8 +196,8 @@ export const issueList = defineTool({
     // not-closed は ID を決め打ちせず、対象プロジェクトの状態一覧から完了集合以外の ID を決める(ADR 0012)。
     let statusIds: number[] | undefined;
     if (status === "not-closed") {
-      statusIds = await resolveNotClosedStatusIds(client, [...new Set(keys)]);
-      if (statusIds.length === 0) return []; // 未完了の状態が 1 つもなければ、該当する課題もない
+      statusIds = await resolveNotClosedStatusIds({ client, now, statusCache }, [...new Set(keys)]);
+      if (statusIds.length === 0) return respond([]); // 未完了の状態が 1 つもなければ、該当する課題もない
     } else {
       statusIds = status;
     }
@@ -156,7 +210,7 @@ export const issueList = defineTool({
       parentIds = [...new Set([...parents, ...childIds])];
     }
 
-    return client.request("GET", "/issues", {
+    const found = await client.request<ListedIssue[]>("GET", "/issues", {
       query: {
         projectId: projectIds,
         assigneeId: assignee === undefined ? [] : [assignee],
@@ -175,6 +229,8 @@ export const issueList = defineTool({
         offset: positiveOrUndefined(a.offset),
       },
     });
+    // full は Backlog の応答をそのまま返す(null などもそのまま。logvalet 互換)。
+    return summary ? respond(found ?? []) : found;
   },
 });
 

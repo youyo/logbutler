@@ -53,6 +53,8 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
             toolConfig,
             // 冪等キャッシュは OAUTH_KV の `idem:` 接頭辞のキーに置く（ADR 0005）。
             idempotency: { kv: env.OAUTH_KV, userId: props.backlogUserId },
+            // 状態一覧のキャッシュは OAUTH_KV の `statuses:` 接頭辞のキーに置く（ADR 0016）。
+            statusCache: { kv: env.OAUTH_KV, userId: props.backlogUserId },
             onBacklogUnauthorized: () => {
               backlogUnauthorized = true;
             },

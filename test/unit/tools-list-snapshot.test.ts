@@ -106,6 +106,9 @@ const M06_TOOLS = ["notification_list", "notification_count", "project_users"].m
   (n) => `logbutler_${n}`,
 );
 
+/** ADR 0016 の課題削除ツール。logvalet に無い。 */
+const ADR16_TOOLS = ["issue_delete"].map((n) => `logbutler_${n}`);
+
 /** ADR 0013 のプロジェクト設定ツール 12 個。logvalet に無い(ユーザー決定 2026-10-29)。 */
 const M07_TOOLS = ["category", "version", "status", "custom_field"].flatMap((r) =>
   ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
@@ -127,13 +130,21 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール = 86 ツールを公開している", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール、ADR 0016 の issue_delete 1 ツール = 87 ツールを公開している", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
     expect(names).toEqual(
-      [...M03_TOOLS, ...M04_TOOLS, ...M05A_TOOLS, ...M05B_TOOLS, ...M06_TOOLS, ...M07_TOOLS].sort(),
+      [
+        ...M03_TOOLS,
+        ...M04_TOOLS,
+        ...M05A_TOOLS,
+        ...M05B_TOOLS,
+        ...M06_TOOLS,
+        ...M07_TOOLS,
+        ...ADR16_TOOLS,
+      ].sort(),
     );
-    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12);
-    expect(names).toHaveLength(86);
+    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12 + 1);
+    expect(names).toHaveLength(87);
   });
 
   it("M06 の 3 ツールは読み取り専用で、notification_* は notification、project_users は project の toolset", async () => {
@@ -174,7 +185,12 @@ describe("tools/list スナップショット", () => {
       "watching_mark_as_read",
     ])
       expect(kind(n), n).toBe("WriteIdempotent");
-    for (const n of ["issue_related_delete", "issue_attachment_delete", "watching_delete"])
+    for (const n of [
+      "issue_related_delete",
+      "issue_attachment_delete",
+      "issue_delete",
+      "watching_delete",
+    ])
       expect(kind(n), n).toBe("Destructive");
     expect(kind("project_conventions")).toBe("ReadOnly");
   });
@@ -276,13 +292,14 @@ describe("tools/list スナップショット", () => {
     for (const c of result.changed) {
       const diffs = c.diffs
         .map((d) => ({ path: `${d.field}.${d.path}`, expected: d.expected }))
-        // issue_list の status_id の説明文は ADR 0012 で変更、include_descendants の追加は ADR 0015(許容理由は baseline.ts)
+        // issue_list の status_id の説明文は ADR 0012 で変更、include_descendants の追加は ADR 0015、detail の追加は ADR 0016(許容理由は baseline.ts)
         .filter(
           (d) =>
             !(
               c.name === "logbutler_issue_list" &&
               (d.path === "inputSchema.properties.status_id.description" ||
-                d.path === "inputSchema.properties.include_descendants")
+                d.path === "inputSchema.properties.include_descendants" ||
+                d.path === "inputSchema.properties.detail")
             ),
         );
       expect(diffs, c.name).toEqual([
@@ -308,6 +325,13 @@ describe("tools/list スナップショット", () => {
     const props = (issueList?.inputSchema.properties ?? {}) as Record<string, { type?: string }>;
     expect(props.include_descendants?.type).toBe("boolean");
     expect(issueList?.inputSchema.required ?? []).not.toContain("include_descendants");
+  });
+
+  it("許容した issue_list の detail は、文字列の任意引数(full / summary。ADR 0016)の追加", async () => {
+    const issueList = (await listTools()).find((t) => t.name === "logbutler_issue_list");
+    const props = (issueList?.inputSchema.properties ?? {}) as Record<string, { type?: string }>;
+    expect(props.detail?.type).toBe("string");
+    expect(issueList?.inputSchema.required ?? []).not.toContain("detail");
   });
 
   it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個を除く)にだけあり、差分は properties の追加だけ", async () => {
@@ -338,7 +362,8 @@ describe("tools/list スナップショット", () => {
           (p) =>
             p !== "inputSchema.properties.timezone" &&
             p !== "inputSchema.properties.status_id.description" &&
-            p !== "inputSchema.properties.include_descendants",
+            p !== "inputSchema.properties.include_descendants" &&
+            p !== "inputSchema.properties.detail",
         );
       expect(paths, c.name).toEqual(["inputSchema.properties.max_response_tokens"]);
     }

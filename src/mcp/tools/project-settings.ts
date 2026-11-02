@@ -5,6 +5,7 @@
  * docs から読み取れない仕様は推測せず、Backlog に任せる(docs/adr/0013 の「未確定の点」)。
  */
 import { z } from "zod";
+import { invalidateStatusCache } from "../../analysis/status-cache";
 import { ArgumentError } from "../../errors";
 import { optBool, optInt, optStr, parseCsvInts, parseDate, reqInt, reqStr, seg } from "../args";
 import { defineTool } from "../registry";
@@ -190,10 +191,13 @@ export const statusAdd = defineTool({
     name: reqStr("Status name"),
     color: reqStr(COLOR_DESCRIPTION),
   }),
-  handler: ({ project_key, name, color }, { client }) =>
-    client.request("POST", `/projects/${seg(project_key)}/statuses`, {
+  handler: async ({ project_key, name, color }, { client, statusCache }) => {
+    const created = await client.request("POST", `/projects/${seg(project_key)}/statuses`, {
       form: { name, color: statusColor(color) },
-    }),
+    });
+    await invalidateStatusCache(statusCache); // 自分の変更はすぐ反映する(ADR 0016)
+    return created;
+  },
 });
 
 export const statusUpdate = defineTool({
@@ -213,14 +217,18 @@ export const statusUpdate = defineTool({
       .optional(),
     color: z.string().describe(COLOR_DESCRIPTION).optional(),
   }),
-  handler: ({ project_key, status_id, name, color }, { client }) => {
+  handler: async ({ project_key, status_id, name, color }, { client, statusCache }) => {
     positiveId("status_id", status_id);
     if (name === undefined && color === undefined) {
       throw new ArgumentError("at least one of name and color is required");
     }
-    return client.request("PATCH", `/projects/${seg(project_key)}/statuses/${seg(status_id)}`, {
-      form: { name, color: color === undefined ? undefined : statusColor(color) },
-    });
+    const updated = await client.request(
+      "PATCH",
+      `/projects/${seg(project_key)}/statuses/${seg(status_id)}`,
+      { form: { name, color: color === undefined ? undefined : statusColor(color) } },
+    );
+    await invalidateStatusCache(statusCache);
+    return updated;
   },
 });
 
@@ -238,15 +246,19 @@ export const statusDelete = defineTool({
       "Status ID that replaces the deleted status on its issues (must be another existing status of the project)",
     ),
   }),
-  handler: ({ project_key, status_id, substitute_status_id }, { client }) => {
+  handler: async ({ project_key, status_id, substitute_status_id }, { client, statusCache }) => {
     positiveId("status_id", status_id);
     positiveId("substitute_status_id", substitute_status_id);
     if (substitute_status_id === status_id) {
       throw new ArgumentError("substitute_status_id must differ from status_id");
     }
-    return client.request("DELETE", `/projects/${seg(project_key)}/statuses/${seg(status_id)}`, {
-      form: { substituteStatusId: substitute_status_id },
-    });
+    const deleted = await client.request(
+      "DELETE",
+      `/projects/${seg(project_key)}/statuses/${seg(status_id)}`,
+      { form: { substituteStatusId: substitute_status_id } },
+    );
+    await invalidateStatusCache(statusCache);
+    return deleted;
   },
 });
 

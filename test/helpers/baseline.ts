@@ -226,6 +226,12 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
       "include_descendants 引数(任意・真偽値・既定 false)の追加。parent_issue_ids の子だけでなく孫まで返す(Backlog の parentIssueId[] は直下の子しか返さないため。ADR 0015)。logvalet の既定の挙動(直下の子だけ)は変わらない。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.include_descendants の追加だけに固定している。",
   },
   {
+    tool: "logbutler_issue_list",
+    fields: ["inputSchema"],
+    reason:
+      "detail 引数(任意・文字列 full / summary・既定 full)の追加。summary は description を含まない要約をエンベロープで返し、少ない件数でも応答が大きくなって response_too_large になる問題を避ける(GitHub issue #2。ADR 0016)。既定の full は logvalet と同じ Backlog の生の配列のまま。差分の範囲は test/unit/tools-list-snapshot.test.ts で properties.detail の追加だけに固定している。",
+  },
+  {
     tool: "logbutler_issue_update",
     fields: ["inputSchema"],
     reason:
@@ -266,6 +272,8 @@ export const ALLOWED_EXTRA: readonly string[] = [
   "logbutler_notification_list",
   "logbutler_notification_count",
   "logbutler_project_users",
+  // ADR 0016: 課題の削除(logvalet にない)。confirm_issue_key を必須にした二重確認つきの Destructive ツール。
+  "logbutler_issue_delete",
   // ADR 0013: プロジェクト設定ツール 12 個(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除)。
   // logvalet に無い。M06 で「ツール数を増やさない」として見送った判断を、ユーザーが覆した(2026-10-29)。
   // 既定の toolsets=all で公開し、read_only=true で隠す。

@@ -5,14 +5,18 @@
  */
 import type { BacklogClient } from "../backlog/client";
 import { ArgumentError } from "../errors";
-import { seg } from "../mcp/args";
 import { MAX_STATUS_PROJECTS } from "./budget";
 import { type Warning, warningFromError } from "./envelope";
+import { type BacklogStatus, createStatusLookup, type StatusCacheDeps } from "./status-cache";
 import { DONE_STATUSES } from "./statuses";
 
-export interface BacklogStatus {
-  id: number;
-  name: string;
+export type { BacklogStatus } from "./status-cache";
+
+/** 状態一覧の取得に要るもの。`statusCache` が無ければ毎回 Backlog から引く(ADR 0016)。 */
+export interface StatusLookupContext {
+  client: BacklogClient;
+  now: () => Date;
+  statusCache?: StatusCacheDeps;
 }
 
 export interface JoinedProject {
@@ -30,16 +34,6 @@ export async function listActiveProjects(client: BacklogClient): Promise<JoinedP
   );
 }
 
-/** GET /projects/:key/statuses。 */
-export async function fetchProjectStatuses(
-  client: BacklogClient,
-  projectKey: string,
-): Promise<BacklogStatus[]> {
-  return (
-    (await client.request<BacklogStatus[]>("GET", `/projects/${seg(projectKey)}/statuses`)) ?? []
-  );
-}
-
 function addOpenIds(into: Set<number>, statuses: readonly BacklogStatus[]): void {
   for (const s of statuses) if (!DONE.has(s.name)) into.add(s.id);
 }
@@ -49,9 +43,10 @@ function addOpenIds(into: Set<number>, statuses: readonly BacklogStatus[]): void
  * 参加プロジェクトすべて(MAX_STATUS_PROJECTS 超は argument_error)。取得の失敗はそのまま投げる。
  */
 export async function resolveNotClosedStatusIds(
-  client: BacklogClient,
+  ctx: StatusLookupContext,
   projectKeys: readonly string[],
 ): Promise<number[]> {
+  const { client } = ctx;
   let keys = projectKeys;
   if (keys.length === 0) {
     keys = (await listActiveProjects(client)).map((p) => p.projectKey);
@@ -62,7 +57,12 @@ export async function resolveNotClosedStatusIds(
     }
   }
   const ids = new Set<number>();
-  for (const key of keys) addOpenIds(ids, await fetchProjectStatuses(client, key));
+  const lookup = createStatusLookup(client, ctx.statusCache, ctx.now);
+  try {
+    for (const key of keys) addOpenIds(ids, await lookup.get(key));
+  } finally {
+    await lookup.flush(); // 途中で失敗しても、ここまでに引いた分は残す
+  }
   return [...ids];
 }
 
@@ -77,7 +77,8 @@ export interface OpenStatusIds {
  * (取れなければ ids は空。呼び出し側は statusId を送らず、応答側の完了集合の除外で補う)、
  * プロジェクトが MAX_STATUS_PROJECTS を超えたら先頭の分だけ使い truncated と warning を返す。
  */
-export async function collectOpenStatusIds(client: BacklogClient): Promise<OpenStatusIds> {
+export async function collectOpenStatusIds(ctx: StatusLookupContext): Promise<OpenStatusIds> {
+  const { client } = ctx;
   const warnings: Warning[] = [];
   let projects: JoinedProject[];
   try {
@@ -100,9 +101,10 @@ export async function collectOpenStatusIds(client: BacklogClient): Promise<OpenS
     projects = projects.slice(0, MAX_STATUS_PROJECTS);
   }
   const ids = new Set<number>();
+  const lookup = createStatusLookup(client, ctx.statusCache, ctx.now);
   for (const p of projects) {
     try {
-      addOpenIds(ids, await fetchProjectStatuses(client, p.projectKey));
+      addOpenIds(ids, await lookup.get(p.projectKey));
     } catch (e) {
       warnings.push(
         warningFromError(
@@ -114,5 +116,6 @@ export async function collectOpenStatusIds(client: BacklogClient): Promise<OpenS
       );
     }
   }
+  await lookup.flush();
   return { ids: [...ids], truncated, warnings };
 }

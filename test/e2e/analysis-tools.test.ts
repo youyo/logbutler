@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activity,
@@ -22,8 +23,10 @@ import {
 } from "../helpers/oauth-flow";
 
 // 「今日」を固定する(2026-10-28 水曜 12:00 JST)。Date だけ差し替え、タイマーは本物のまま。
-beforeEach(() => {
+beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  // 状態一覧の KV キャッシュ(ADR 0016)はテスト間で残るので、毎回空にしてから始める。
+  await env.OAUTH_KV.delete("statuses:42");
 });
 afterEach(() => {
   vi.useRealTimers();

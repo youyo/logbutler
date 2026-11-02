@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { issueDelete } from "../../src/mcp/tools/issue-write";
 import { starAdd } from "../../src/mcp/tools/star";
 import { callTool, formPairs } from "../helpers/tool-call";
 
@@ -127,6 +128,48 @@ describe("issue_attachment_delete", () => {
       {},
     );
     expect(zero.json.error.code).toBe("argument_error");
+  });
+});
+
+describe("issue_delete", () => {
+  it("DELETE /issues/{key}。confirm_issue_key が issue_key と一致すれば、削除された課題をそのまま返す", async () => {
+    const issue = { id: 5, issueKey: "PROJ-5", summary: "消す" };
+    const run = await callTool(
+      "logbutler_issue_delete",
+      { issue_key: "PROJ-5", confirm_issue_key: "PROJ-5" },
+      { "DELETE /issues/PROJ-5": issue },
+    );
+    expect(run.isError, run.text).toBe(false);
+    expect(run.calls).toEqual(["DELETE /issues/PROJ-5"]);
+    expect(run.json).toEqual(issue);
+  });
+
+  it("confirm_issue_key が違う・大文字小文字が違う・空なら、Backlog を呼ぶ前に argument_error", async () => {
+    for (const confirm of ["PROJ-6", "proj-5", " PROJ-5", ""]) {
+      const run = await callTool(
+        "logbutler_issue_delete",
+        { issue_key: "PROJ-5", confirm_issue_key: confirm },
+        {},
+      );
+      expect(run.isError, confirm).toBe(true);
+      expect(run.json.error.code, confirm).toBe("argument_error");
+      expect(run.calls).toEqual([]);
+    }
+  });
+
+  it("confirm_issue_key は必須(省略は argument_error。Backlog は呼ばない)", async () => {
+    const run = await callTool("logbutler_issue_delete", { issue_key: "PROJ-5" }, {});
+    expect(run.isError).toBe(true);
+    expect(run.json.error.code).toBe("argument_error");
+    expect(run.calls).toEqual([]);
+  });
+
+  it("注釈: 破壊的(destructiveHint)で、toolset は issue", async () => {
+    expect(issueDelete.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+    });
+    expect(issueDelete.toolset).toBe("issue");
   });
 });
 

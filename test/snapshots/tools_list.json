@@ -1098,6 +1098,34 @@
     }
   },
   {
+    "name": "logbutler_issue_delete",
+    "description": "Delete an issue permanently (cannot be undone; its comments, attachments and relations are lost too). confirm_issue_key must exactly equal issue_key",
+    "inputSchema": {
+      "properties": {
+        "confirm_issue_key": {
+          "description": "Must be exactly the same as issue_key; confirms the deletion",
+          "type": "string"
+        },
+        "issue_key": {
+          "description": "Issue key (e.g. PROJECT-123)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "confirm_issue_key",
+        "issue_key"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "課題削除"
+    }
+  },
+  {
     "name": "logbutler_issue_get",
     "description": "Get issue details by issue key",
     "inputSchema": {
@@ -1135,6 +1163,10 @@
         "count": {
           "description": "Max number of issues (default 20, max 100)",
           "type": "number"
+        },
+        "detail": {
+          "description": "Response format: full (default; Backlog's raw issue objects) or summary (a compact envelope { count, issues } without descriptions: id, issue_key, project_key, summary, issue_type, status, priority, assignee, start_date, due_date, parent_issue_id, created, updated). Use summary to keep the response small; get the full text with issue_get",
+          "type": "string"
         },
         "due_date": {
           "description": "Due date filter: overdue, this-week, today, this-month, YYYY-MM-DD, or YYYY-MM-DD:YYYY-MM-DD",

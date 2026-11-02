@@ -21,8 +21,9 @@ export const MAX_SEARCH_WIKI_PROJECTS = 10;
  * 「未完了」の状態 ID を決めるために状態一覧(GET /projects/:key/statuses)を引くプロジェクト数の上限(ADR 0012)。
  * my_tasks は参加プロジェクトの先頭からこの数まで(超えたら truncated + warning)。issue_list の
  * `status_id=not-closed` は、対象がこの数を超えたら argument_error。
+ * 20 から 100 に引き上げた(ADR 0016)。状態一覧は KV に 600 秒キャッシュする(`status-cache.ts`)。
  */
-export const MAX_STATUS_PROJECTS = 20;
+export const MAX_STATUS_PROJECTS = 100;
 
 /** `digest_unified` の入力と展開後の上限。logvalet は無制限(最悪 2,000 回超)。 */
 export const UNIFIED_MAX_TEAMS = 3;
@@ -50,6 +51,8 @@ export const API_BUDGET = {
   issueTriageMaterials: 1 + PROJECT_ISSUE_CALLS + DEFAULT_MAX_PAGES + 1,
   /** GetMyself 1 + プロジェクト一覧 1 + 状態一覧 MAX_STATUS_PROJECTS + overdue 10 + upcoming 10 + watching 10 */
   myTasks: 1 + 1 + MAX_STATUS_PROJECTS + 3 * DEFAULT_MAX_PAGES,
+  /** GetProject 100 + GetMyself 1 + 状態一覧 MAX_STATUS_PROJECTS + 子の収集 2 + 一覧 1(ADR 0016。キャッシュが空の最悪ケース) */
+  issueList: MAX_STATUS_PROJECTS + 1 + MAX_STATUS_PROJECTS + 2 + 1,
   /** GetProject 1 + 課題 10 ページ */
   digestPeriodic: PROJECT_ISSUE_CALLS,
   /** GetIssue 1 + コメント 10 ページ + アクティビティ MAX_ACTIVITY_PAGES ページ */

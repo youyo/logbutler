@@ -139,7 +139,7 @@ export function protocolSuite(): void {
         .map((t) => t.name)
         .sort();
       expect(names(r)).toEqual(expected);
-      expect(expected.length).toBeLessThan(86);
+      expect(expected.length).toBeLessThan(87);
       const before = await client.ok("logbutler_issue_list", {
         project_key: config.projectKey,
         sort: "created",
@@ -207,9 +207,9 @@ export function protocolSuite(): void {
         hidden.text.slice(0, 200),
       ).toBe(true);
       const all = await client.listTools(withQuery("?toolsets=all"));
-      expect(names(all)).toHaveLength(86);
+      expect(names(all)).toHaveLength(87);
       const ro = await client.listTools(withQuery("?read_only=false"));
-      expect(names(ro)).toHaveLength(86);
+      expect(names(ro)).toHaveLength(87);
       const mixedCase = await client.listTools(withQuery("?toolsets=STAR"));
       expect(names(mixedCase)).toEqual(["logbutler_star_add"]);
       // プロジェクト設定ツール 12 個は toolsets=project_settings で出て、read_only=true との組み合わせは 400(ADR 0013)
@@ -245,7 +245,7 @@ export function protocolSuite(): void {
       expect(call.status).toBe(400);
       // 関係のないクエリは無視される
       const ignored = await client.listTools(withQuery("?optimize_context=true"));
-      expect(names(ignored)).toHaveLength(86);
+      expect(names(ignored)).toHaveLength(87);
     });
   });
 
