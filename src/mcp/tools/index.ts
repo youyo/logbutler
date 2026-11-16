@@ -34,6 +34,7 @@ import {
 import {
   issueAttachmentDelete,
   issueAttachmentUpload,
+  issueAttachmentUploadPrepare,
   issueCommentAdd,
   issueCommentUpdate,
   issueCreate,
@@ -130,6 +131,8 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   projectConventions,
   // ADR 0016: 課題の削除(confirm_issue_key 必須)
   issueDelete,
+  // ADR 0018: 添付アップロードの URL 発行(UPLOAD_BUCKET の binding が無い Worker では api-handler が外す)
+  issueAttachmentUploadPrepare,
   // M05A: 分析系の加工ツール 11 個
   issueStale,
   projectBlockers,

@@ -135,6 +135,37 @@ describe("render-wrangler-config (実プロセス)", () => {
     expect(config.name).toBe("e2e-logbutler");
   });
 
+  it("LOGBUTLER_UPLOAD_BUCKET_NAME があれば R2 の UPLOAD_BUCKET を差し替え、無ければ取り除く(ADR 0018)", async () => {
+    const withBucket = join(work, "with.jsonc");
+    const r1 = await render(MAIN, ["--out", withBucket], {
+      ...VALID_ENV,
+      LOGBUTLER_UPLOAD_BUCKET_NAME: "e2e-uploads",
+    });
+    expect(r1.code).toBe(0);
+    expect(JSON.parse(await readFile(withBucket, "utf8")).r2_buckets).toEqual([
+      { binding: "UPLOAD_BUCKET", bucket_name: "e2e-uploads" },
+    ]);
+
+    const without = join(work, "without.jsonc");
+    const r2 = await render(MAIN, ["--out", without], VALID_ENV);
+    expect(r2.code).toBe(0);
+    const config = JSON.parse(await readFile(without, "utf8"));
+    expect(JSON.stringify(config.r2_buckets ?? [])).not.toContain("UPLOAD_BUCKET");
+  });
+
+  it("--example --no-upload-bucket は、バケット無しの形のダミー設定を生成する(deploy:check の 2 つ目の形)", async () => {
+    const out = join(work, "example-nobucket.jsonc");
+    const r = await render(MAIN, ["--example", "--no-upload-bucket", "--out", out], {});
+    expect(r.code).toBe(0);
+    const config = JSON.parse(await readFile(out, "utf8"));
+    expect(JSON.stringify(config.r2_buckets ?? [])).not.toContain("UPLOAD_BUCKET");
+    const withBucket = join(work, "example.jsonc");
+    expect((await render(MAIN, ["--example", "--out", withBucket], {})).code).toBe(0);
+    expect(JSON.stringify(JSON.parse(await readFile(withBucket, "utf8")).r2_buckets)).toContain(
+      "UPLOAD_BUCKET",
+    );
+  });
+
   it("不明な引数は終了コード 2", async () => {
     const r = await render(MAIN, ["--nope"], VALID_ENV);
     expect(r.code).toBe(2);
@@ -145,6 +176,7 @@ describe("render-wrangler-config (実プロセス)", () => {
     const variants: Record<string, string>[] = [
       {},
       { LOGBUTLER_CUSTOM_DOMAIN: "logbutler.e2e.example.org" },
+      { LOGBUTLER_UPLOAD_BUCKET_NAME: "e2e-uploads" },
     ];
     for (const extra of variants) {
       const out = join(REPO, `wrangler.deploy.e2e-${process.pid}.jsonc`);
@@ -158,9 +190,12 @@ describe("render-wrangler-config (実プロセス)", () => {
         );
         expect(stdout + stderr).toContain("e2e-logbutler");
         expect(stdout + stderr).toContain("--dry-run");
+        // R2 の binding はバケット名があるときだけ(ADR 0018)
+        if (extra.LOGBUTLER_UPLOAD_BUCKET_NAME) expect(stdout + stderr).toContain("e2e-uploads");
+        else expect(stdout + stderr).not.toContain("UPLOAD_BUCKET");
       } finally {
         await rm(out, { force: true });
       }
     }
-  }, 120_000);
+  }, 180_000);
 });

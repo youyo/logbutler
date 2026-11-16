@@ -5,11 +5,15 @@ import type { GrantProps } from "../auth/props";
 import { createBacklogClient } from "../backlog/client";
 import type { Env } from "../env";
 import { QueryError } from "../errors";
-import { MCP_PATH, protectedResourceMetadataUrl } from "../urls";
+import { baseUrl, MCP_PATH, protectedResourceMetadataUrl } from "../urls";
 import { parseToolConfig } from "./registry";
 import { callMcpHandler } from "./request-body";
 import { createMcpServer } from "./server";
 import { ALL_TOOLS } from "./tools";
+import { issueAttachmentUploadPrepare } from "./tools/issue-write";
+
+/** UPLOAD_BUCKET の binding が無い Worker では公開しないツール(ADR 0018)。 */
+const REQUIRES_UPLOAD_BUCKET = new Set([issueAttachmentUploadPrepare.name]);
 
 /**
  * OAuthProvider の apiHandler。`ctx.props` は grant の props(Backlog のトークン入り)。
@@ -28,10 +32,17 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
       const props = oauthCtx.props;
       let backlogUnauthorized = false;
 
+      // 添付アップロードの URL 経路(ADR 0018)は、R2 の binding があるときだけ動く。無ければ prepare を出さない。
+      // フラグではなく「機能が物理的に動くか」で決める(文字列の vars で機能を切り替えない。ADR 0008)。
+      const bucket = env.UPLOAD_BUCKET;
+      const tools = bucket
+        ? ALL_TOOLS
+        : ALL_TOOLS.filter((t) => !REQUIRES_UPLOAD_BUCKET.has(t.name));
+
       // toolsets / read_only は接続 URL のクエリで決まる(ADR 0008)。不正な値は 400 で理由を返す。
       let toolConfig: ReturnType<typeof parseToolConfig>;
       try {
-        toolConfig = parseToolConfig(new URL(request.url).searchParams, ALL_TOOLS);
+        toolConfig = parseToolConfig(new URL(request.url).searchParams, tools);
       } catch (e) {
         if (!(e instanceof QueryError)) throw e;
         return new Response(
@@ -50,11 +61,18 @@ export function createMcpApiHandler(): Required<Pick<ExportedHandler<Env>, "fetc
                 maxApiCalls: options.maxApiCalls,
               }),
             spaceHost: env.BACKLOG_SPACE_HOST,
+            tools,
             toolConfig,
             // 冪等キャッシュは OAUTH_KV の `idem:` 接頭辞のキーに置く（ADR 0005）。
             idempotency: { kv: env.OAUTH_KV, userId: props.backlogUserId },
             // 状態一覧のキャッシュは OAUTH_KV の `statuses:` 接頭辞のキーに置く（ADR 0016）。
             statusCache: { kv: env.OAUTH_KV, userId: props.backlogUserId },
+            // 添付アップロードの一時置き場(ADR 0018)。ticket・claim の所有者は Backlog のユーザー ID で照合する。
+            ...(bucket
+              ? {
+                  uploads: { bucket, userId: props.backlogUserId, baseUrl: baseUrl(env) },
+                }
+              : {}),
             onBacklogUnauthorized: () => {
               backlogUnauthorized = true;
             },

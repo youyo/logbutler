@@ -12,6 +12,11 @@ export interface Env {
   BACKLOG_CLIENT_ID: string;
   /** Backlog OAuth クライアントシークレット(secret)。 */
   BACKLOG_CLIENT_SECRET: string;
+  /**
+   * 添付アップロードの URL 経路(ADR 0018)の一時置き場。任意。無ければ prepare ツールを出さず、
+   * PUT /uploads/* は 404、upload_id はエラーになる(フラグではなく「機能が物理的に動くか」。ADR 0008 の例外ではない)。
+   */
+  UPLOAD_BUCKET?: R2Bucket;
   /** OAuthProvider が defaultHandler に渡すヘルパー。 */
   OAUTH_PROVIDER: OAuthHelpers;
 }

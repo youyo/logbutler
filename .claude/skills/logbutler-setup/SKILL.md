@@ -90,6 +90,7 @@ description: Logbutler の下流リポジトリ(upstream を fork / ミラーし
 - [ ] `LOGBUTLER_BACKLOG_SPACE_HOST`
 - [ ] `LOGBUTLER_PUBLIC_BASE_URL`
 - [ ] `LOGBUTLER_CUSTOM_DOMAIN`(任意)
+- [ ] `LOGBUTLER_UPLOAD_BUCKET_NAME`(任意。添付を URL 経由で受け取る経路を使うときだけ。ADR 0018。R2 バケットは Step 3 で作る。使うかどうかを運用者に確認する。使わないなら設定しない)
 
 公開ホスト名(`<domain>`)を先に確定させる。Step 2 のリダイレクト URI がこれで決まるため。
 
@@ -129,7 +130,16 @@ description: Logbutler の下流リポジトリ(upstream を fork / ミラーし
 - API トークンはダッシュボードで運用者が作る。権限は §2-2 の表のとおり(未検証。停止条件の補足を参照。カスタムドメインを使う場合だけ必要な権限もある)。
 - 出力された KV の id を `LOGBUTLER_KV_NAMESPACE_ID` に使う。`mise.local.toml` の Step 1 のダミーを実値に置き換えて、`mise run deploy:render` をもう一度通す。`--update-config` は使わない(ファイルを書き換えない)。
 
-完了条件: 32 桁の 16 進の KV id が得られ、運用者が「このアカウントの namespace である」と確認し、`deploy:render` が通り、`CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` が運用者の手元に用意されている(値は共有しない)。
+### 添付アップロード用の R2 バケット(任意。`LOGBUTLER_UPLOAD_BUCKET_NAME` を使う場合だけ)
+
+参照: runbook §2-4。
+
+- バケットの作成とライフサイクルルールの追加は、KV と同じく**運用者の明示的な指示があるときだけ**実行する(費用が発生しうる。R2 の有効化に支払い方法の登録が要るかは未検証: manual-verification V23)。
+- **ライフサイクルルール(`ticket/` `data/` `claim/` を 1 日で削除)は必須**。ルールを付けずに `LOGBUTLER_UPLOAD_BUCKET_NAME` を登録しない。`pnpm exec wrangler r2 bucket lifecycle list <bucket>` で 3 つのルールを運用者と確認する。
+- API トークンに R2 の権限が要る(runbook §2-2。権限名は未検証)。
+- アップロード URL は秘密の URL で、Workers Logs に残る(runbook §5-1)。ログを見られる人と保持期間を運用者に伝える。
+
+完了条件: 32 桁の 16 進の KV id が得られ、運用者が「このアカウントの namespace である」と確認し、`deploy:render` が通り、`CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` が運用者の手元に用意されている(値は共有しない)。R2 を使うなら、バケットと 3 つのライフサイクルルールがある。
 
 ## Step 4: Variables / Secrets の登録
 
@@ -139,14 +149,14 @@ description: Logbutler の下流リポジトリ(upstream を fork / ミラーし
 
 ### Variables のコマンド
 
-- 名前は許可リストだけ: `LOGBUTLER_WORKER_NAME` `LOGBUTLER_KV_NAMESPACE_ID` `LOGBUTLER_BACKLOG_SPACE_HOST` `LOGBUTLER_PUBLIC_BASE_URL` `LOGBUTLER_CUSTOM_DOMAIN`(任意)。ほかの名前は設定しない。
+- 名前は許可リストだけ: `LOGBUTLER_WORKER_NAME` `LOGBUTLER_KV_NAMESPACE_ID` `LOGBUTLER_BACKLOG_SPACE_HOST` `LOGBUTLER_PUBLIC_BASE_URL` `LOGBUTLER_CUSTOM_DOMAIN`(任意) `LOGBUTLER_UPLOAD_BUCKET_NAME`(任意。ライフサイクルルールを確認してから)。ほかの名前は設定しない。
 - 値はシングルクォートで囲み、`--repo` を必ず付ける: `gh variable set LOGBUTLER_WORKER_NAME --body 'logbutler' --repo <OWNER/REPO>`。`eval` や、クォートしない変数展開で値を渡さない。値にシングルクォートや改行が含まれるなら、形式として不正なので Step 1 に戻る。
 
 ### 登録の順序と手順
 
 - Secrets(運用者が自分で `gh secret set <NAME> --repo <OWNER/REPO>`): `CLOUDFLARE_API_TOKEN` `CLOUDFLARE_ACCOUNT_ID` `BACKLOG_CLIENT_ID` `BACKLOG_CLIENT_SECRET`。
 - (a) 新規セットアップでは `LOGBUTLER_WORKER_NAME` を**最後に**登録する。これが空のあいだ `deploy.yml` は飛ばされるので、途中の push で不完全な設定のデプロイが走らない。**この順序が効くのは (a) だけ**。(b)(c) ではすでに `LOGBUTLER_WORKER_NAME` があり、Variables を 1 つ変えるたびに次の push でデプロイが走る。すでに始まったジョブは止められない。
-- 使わない任意の Variable(例 `LOGBUTLER_CUSTOM_DOMAIN`)がすでに登録されていたら、運用者に確認する。残っているとカスタムドメインの route が作られ、workers.dev が無効になる(`scripts/render-wrangler-config/core.ts`)。勝手に削除・置換しない。
+- 使わない任意の Variable(例 `LOGBUTLER_CUSTOM_DOMAIN`)がすでに登録されていたら、運用者に確認する。残っているとカスタムドメインの route が作られ、workers.dev が無効になる(`scripts/render-wrangler-config/core.ts`)。`LOGBUTLER_UPLOAD_BUCKET_NAME` が残っていると R2 の binding が付く。勝手に削除・置換しない。
 
 ### 登録後の照合
 
@@ -173,6 +183,7 @@ description: Logbutler の下流リポジトリ(upstream を fork / ミラーし
 - [ ] `https://<domain>/healthz` が 200。503 なら本文の `missing` / `invalid` が直す項目(ADR 0010、runbook §5-5。停止条件の表に従う)
 - [ ] `https://<domain>/.well-known/oauth-protected-resource/mcp` の `resource` が `https://<domain>/mcp`
 - [ ] `mise run verify:oauth -- https://<domain>/mcp` の**全段階が OK**(ブラウザで Backlog にログインして同意するのは運用者。出力の扱いは「秘密値の扱い」。状態ファイル `.verify-oauth.local.json` は開かない)
+- [ ] (R2 を使う場合)`tools/list` に `logbutler_issue_attachment_upload_prepare` が出る。添付の通しの確認は manual-verification の V18(検証用プロジェクトでだけ。運用者の許可があるとき)
 - [ ] MCP クライアントからつないで `logbutler_user_me` が自分の Backlog ユーザーを返す。例: `claude mcp add --transport http logbutler https://<domain>/mcp`。ツールの絞り込み(`toolsets` / `read_only`)は README の「接続 URL のクエリ」を見る
 
 Secrets の中身が正しいか(client id / secret の誤りなど)は、ここで初めて分かる。`verify:oauth` が認可の段階で失敗したら、Secret の再投入が必要かもしれないが、再投入と再デプロイは運用者の承認の上で行う。
@@ -205,7 +216,7 @@ Secrets の中身が正しいか(client id / secret の誤りなど)は、ここ
 - Step 0 preflight: <upstream でないこと、Actions 有効化、前提、mise.local.toml の ignore の実態>
 - Step 1 値の検証: mise run deploy:render <成功/失敗と項目名>
 - Step 2 Backlog OAuth アプリ: リダイレクト URI の一致 <確認済み/未>
-- Step 3 Cloudflare: アカウントの一致 <運用者が確認済み/未>、KV <作成済み/既存を使用/未>(形式のみ検証)、API トークン <用意済み/未>
+- Step 3 Cloudflare: アカウントの一致 <運用者が確認済み/未>、KV <作成済み/既存を使用/未>(形式のみ検証)、API トークン <用意済み/未>、R2(任意) <使わない/バケットとライフサイクルルール 3 つを確認済み/未>
 - Step 4 Variables / Secrets: Variables の値の照合 <承認済み一覧と一致/差異あり>、Secrets は名前の一覧のみ確認
 - Step 5 デプロイ: 承認した SHA <SHA>、run ID <ID>、deploy ジョブ <success/failure/skipped>
 - Step 6 動作確認: /healthz <ステータス>、oauth-protected-resource <OK/NG>、verify:oauth <全段階 OK か>、user_me <成功/失敗>

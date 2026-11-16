@@ -5,6 +5,7 @@
   // upstream の変更を pull するときに競合する。デプロイ用の設定は `mise run deploy:render` が、
   // このファイルと LOGBUTLER_* 環境変数から wrangler.deploy.jsonc (gitignore 済み) に生成する (ADR 0011)。
   // 生成時は name / kv_namespaces の OAUTH_KV の id / vars の BACKLOG_SPACE_HOST・PUBLIC_BASE_URL / routes / workers_dev だけが差し替わる。
+  // 例外: r2_buckets の UPLOAD_BUCKET は、LOGBUTLER_UPLOAD_BUCKET_NAME があれば bucket_name を差し替え、なければ要素ごと取り除く (ADR 0018)。
   // それ以外 (main, compatibility_date, compatibility_flags, observability, ほかの bindings など) は、ここに書いたものがそのまま下流に届く。
   "name": "logbutler",
   "main": "src/index.ts",
@@ -17,6 +18,11 @@
   "kv_namespaces": [
     // ローカル開発・テスト用のダミー id。デプロイ時は LOGBUTLER_KV_NAMESPACE_ID で差し替わる。
     { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }
+  ],
+  "r2_buckets": [
+    // 添付アップロードの URL 経路 (ADR 0018) の一時置き場。任意の設定で、binding が無くても Worker は動く (prepare ツールが出ないだけ)。
+    // ここはローカル開発・テスト用のダミー名。デプロイ時は LOGBUTLER_UPLOAD_BUCKET_NAME で差し替わり、未設定なら取り除かれる。
+    { "binding": "UPLOAD_BUCKET", "bucket_name": "logbutler-uploads-local" }
   ],
   "vars": {
     // ローカル開発・テスト用のダミー。デプロイ時は LOGBUTLER_BACKLOG_SPACE_HOST / LOGBUTLER_PUBLIC_BASE_URL で差し替わる。

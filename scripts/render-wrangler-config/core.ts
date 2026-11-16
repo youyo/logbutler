@@ -1,6 +1,7 @@
 // upstream の wrangler.jsonc と環境変数から、デプロイ用の wrangler 設定(フラット)を作る純粋なコア(ADR 0011)。
 // 入出力(ファイル・process.env)は main.ts が担う。ここは文字列とオブジェクトだけを扱う。
 // 検証エラーには項目名と理由だけを載せ、入力値は決して載せない。
+// 差し替えるのは name・OAUTH_KV の id・vars の 2 つ・routes / workers_dev と、R2 の UPLOAD_BUCKET(任意。名前が無ければ要素ごと除く。ADR 0018)。
 
 export type ErrorReason = "missing" | "invalid" | "placeholder";
 export interface RenderError {
@@ -17,6 +18,7 @@ export const ENV_NAMES = {
   spaceHost: "LOGBUTLER_BACKLOG_SPACE_HOST",
   publicBaseUrl: "LOGBUTLER_PUBLIC_BASE_URL",
   customDomain: "LOGBUTLER_CUSTOM_DOMAIN",
+  uploadBucketName: "LOGBUTLER_UPLOAD_BUCKET_NAME",
 } as const;
 
 /** `deploy:check`(dry-run)用のダミー。実在しない値で、Cloudflare には届かない。 */
@@ -26,9 +28,14 @@ export const EXAMPLE_ENV: Record<string, string> = {
   LOGBUTLER_BACKLOG_SPACE_HOST: "example.backlog.com",
   LOGBUTLER_PUBLIC_BASE_URL: "https://logbutler.example.com",
   LOGBUTLER_CUSTOM_DOMAIN: "logbutler.example.com",
+  LOGBUTLER_UPLOAD_BUCKET_NAME: "logbutler-uploads-example",
 };
 
 const KV_BINDING = "OAUTH_KV";
+/** 添付アップロードの URL 経路の R2(任意。ADR 0018)。 */
+const UPLOAD_BUCKET_BINDING = "UPLOAD_BUCKET";
+/** R2 のバケット名: 小文字・数字・ハイフン、3〜63 文字、先頭と末尾は英数字。 */
+const BUCKET_NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const PLACEHOLDER = /<[^>]*>/;
 const WORKER_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const KV_ID = /^[0-9a-f]{32}$/i;
@@ -125,6 +132,7 @@ export function renderWranglerConfig(
   const spaceHost = read(ENV_NAMES.spaceHost, (v) => HOSTNAME.test(v), true);
   const baseUrl = read(ENV_NAMES.publicBaseUrl, isValidBaseUrl, true);
   const customDomain = read(ENV_NAMES.customDomain, (v) => HOSTNAME.test(v), false);
+  const uploadBucket = read(ENV_NAMES.uploadBucketName, (v) => BUCKET_NAME.test(v), false);
 
   let base: Record<string, unknown> | undefined;
   try {
@@ -155,6 +163,23 @@ export function renderWranglerConfig(
     unknown
   >;
   config.vars = { ...vars, BACKLOG_SPACE_HOST: spaceHost, PUBLIC_BASE_URL: baseUrl };
+
+  // R2 の UPLOAD_BUCKET は任意(ADR 0018)。名前があれば差し替え、無ければ要素ごと取り除く
+  // (ADR 0011 の「それ以外はそのまま届く」への例外。ダミー名のバケットを下流にデプロイさせない)。
+  const r2 = Array.isArray(rest.r2_buckets) ? (rest.r2_buckets as Record<string, unknown>[]) : [];
+  const others = r2.filter((e) => e.binding !== UPLOAD_BUCKET_BINDING);
+  if (uploadBucket) {
+    const hasUpload = r2.some((e) => e.binding === UPLOAD_BUCKET_BINDING);
+    config.r2_buckets = hasUpload
+      ? r2.map((e) =>
+          e.binding === UPLOAD_BUCKET_BINDING ? { ...e, bucket_name: uploadBucket } : e,
+        )
+      : [...r2, { binding: UPLOAD_BUCKET_BINDING, bucket_name: uploadBucket }];
+  } else if (others.length > 0) {
+    config.r2_buckets = others;
+  } else {
+    delete config.r2_buckets;
+  }
 
   if (customDomain) {
     config.routes = [{ pattern: customDomain, custom_domain: true }];

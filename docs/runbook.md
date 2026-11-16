@@ -25,6 +25,7 @@ Logbutler(Backlog 用 Remote MCP サーバー)を、自分の Cloudflare アカ�
 | `BACKLOG_SPACE_HOST` | Variable `LOGBUTLER_BACKLOG_SPACE_HOST` | `<space>.backlog.com` | スキーム・スラッシュなし |
 | `PUBLIC_BASE_URL` | Variable `LOGBUTLER_PUBLIC_BASE_URL` | `https://<domain>` | https のオリジン。末尾スラッシュ・パスなし。issuer とトークンの audience の元 |
 | カスタムドメイン(任意) | Variable `LOGBUTLER_CUSTOM_DOMAIN` | `<domain>` | あれば `custom_domain` の route になり workers.dev は無効。なければ workers.dev で公開。デプロイ時に DNS と証明書が作られる(そのホスト名に既存の DNS レコードがあると失敗するので先に消す) |
+| 添付アップロード用の R2 バケット(任意) | Variable `LOGBUTLER_UPLOAD_BUCKET_NAME` | `logbutler-uploads` | 添付を URL 経由で受け取る経路(ADR 0018)。あれば binding `UPLOAD_BUCKET` として付く。なければ binding ごと外れ、`issue_attachment_upload_prepare` が出ない(base64 の経路は動く)。使うなら手順 2-4 の**ライフサイクルルールが必須** |
 | `BACKLOG_CLIENT_ID` | Secret `BACKLOG_CLIENT_ID` | Backlog が発行 | コミットしない。Worker の secret としてデプロイ時に投入される |
 | `BACKLOG_CLIENT_SECRET` | Secret `BACKLOG_CLIENT_SECRET` | Backlog が発行 | 同上 |
 | Cloudflare API トークン | Secret `CLOUDFLARE_API_TOKEN` | 手順 2-2 | |
@@ -85,6 +86,7 @@ Cloudflare ダッシュボード → My Profile → API Tokens で、**最小権
 |---|---|---|
 | Workers Scripts : Edit | Account | Worker のアップロードと secrets の投入 |
 | Workers KV Storage : Edit | Account | KV を wrangler が参照・操作する(デプロイ時の binding 検証)。対象は作成した namespace だけに絞れる場合は絞る |
+| Workers R2 Storage : Edit | Account | 添付アップロード用の R2(手順 2-4)を使う場合だけ。デプロイ時の binding 検証(**権限名は未検証**) |
 | Zone : Read | Zone(対象ゾーンのみ) | カスタムドメインを使う場合だけ |
 | DNS : Edit | Zone(対象ゾーンのみ) | カスタムドメインを使う場合だけ(DNS レコードと証明書の作成) |
 
@@ -94,6 +96,28 @@ Account Resources は自分のアカウントだけ、Zone Resources は対象�
 ### 2-3. 前段の保護(任意)
 
 Logbutler の前段に Access や MCP Server Portal を置く場合は別途設定する(次節)。Logbutler 自体は DCR 対応の OAuth 付き MCP サーバーとして振る舞い、Access の設定を持たない。
+
+### 2-4. 添付アップロード用の R2 バケット(任意。ADR 0018)
+
+`issue_attachment_upload` を、LLM に base64 を書き出させずに URL 経由で使えるようにする(Claude Code など、shell の `curl` が Worker に届くクライアント向け)。使わないなら何もしなくてよい(binding が付かず、従来どおり動く)。
+
+```sh
+pnpm exec wrangler r2 bucket create logbutler-uploads
+# 必須: 一時ファイルを 1 日で消すライフサイクルルール(接頭辞ごとに 1 つ)
+pnpm exec wrangler r2 bucket lifecycle add logbutler-uploads expire-ticket ticket/ --expire-days 1
+pnpm exec wrangler r2 bucket lifecycle add logbutler-uploads expire-data data/ --expire-days 1
+pnpm exec wrangler r2 bucket lifecycle add logbutler-uploads expire-claim claim/ --expire-days 1
+pnpm exec wrangler r2 bucket lifecycle list logbutler-uploads   # 3 つのルールを確認
+```
+
+確認項目は manual-verification の V18〜V24。
+
+バケット名を Variable `LOGBUTLER_UPLOAD_BUCKET_NAME` に登録する。
+
+- **ライフサイクルルールは必須**。完了した分は Worker が消すが、PUT だけして完了しなかったファイル・失敗した処理の状態は、このルールでしか消えない。発行数の上限は設けていない(ADR 0018 の「限界」)ので、ルールが無いと R2 に溜まり続ける。
+- R2 の有効化に支払い方法の登録が要るかは未検証(manual-verification の V23)。
+- バケットは Logbutler 専用にする(ほかの用途のオブジェクトを置かない)。
+- アップロード URL(`https://<domain>/uploads/<upload_id>`)は**秘密の URL**で、知っていれば誰でも prepare から 60 秒以内に 1 回だけ PUT できる(完了は PUT の成功から 15 分以内)。Workers Logs にはリクエストの URL が残るので、ログを見られる人とログの保持期間を確認しておく(5-1)。
 
 ## 3. GitHub に Variables / Secrets を登録する
 
@@ -106,6 +130,7 @@ Logbutler の前段に Access や MCP Server Portal を置く場合は別途設�
 | Variable | `LOGBUTLER_BACKLOG_SPACE_HOST` | 必須 |
 | Variable | `LOGBUTLER_PUBLIC_BASE_URL` | 必須 |
 | Variable | `LOGBUTLER_CUSTOM_DOMAIN` | 任意 |
+| Variable | `LOGBUTLER_UPLOAD_BUCKET_NAME` | 任意(添付の URL 経路を使うなら。手順 2-4) |
 | Secret | `CLOUDFLARE_API_TOKEN` | 必須 |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | 必須 |
 | Secret | `BACKLOG_CLIENT_ID` | 必須 |
@@ -150,6 +175,7 @@ LOGBUTLER_KV_NAMESPACE_ID = "<32 桁の 16 進>"
 LOGBUTLER_BACKLOG_SPACE_HOST = "<space>.backlog.com"
 LOGBUTLER_PUBLIC_BASE_URL = "https://<domain>"
 # LOGBUTLER_CUSTOM_DOMAIN = "<domain>"   # カスタムドメインを使う場合だけ
+# LOGBUTLER_UPLOAD_BUCKET_NAME = "logbutler-uploads"   # 添付の URL 経路を使う場合だけ(手順 2-4)
 ```
 
 ```sh
@@ -160,7 +186,7 @@ pnpm exec wrangler secret put BACKLOG_CLIENT_ID -c wrangler.deploy.jsonc
 pnpm exec wrangler secret put BACKLOG_CLIENT_SECRET -c wrangler.deploy.jsonc
 ```
 
-`mise run deploy:check` は、環境変数なしでダミー値の設定を生成して `wrangler deploy --dry-run` するだけ(Cloudflare へは何も変更しない)。upstream の CI がこれを使う。
+`mise run deploy:check` は、環境変数なしでダミー値の設定を生成して `wrangler deploy --dry-run` するだけ(Cloudflare へは何も変更しない)。R2 の `UPLOAD_BUCKET` あり・なしの 2 つの形を通す。upstream の CI がこれを使う。
 
 ## 4. 前段に Access や Portal を置く場合
 
@@ -192,6 +218,9 @@ Portal に登録するときの注意:
 | `{"event":"token_exchange","grant_type":...,"backlog_remaining_seconds":N,"needs_refresh":bool,"stale_marker":bool,"refreshed":bool,"access_token_changed":bool,"ttl_basis":"new_token"\|"backlog_remaining","access_token_ttl":N}` | MCP のトークン発行・更新のたびの判定(ADR 0014)。残り秒数は `props` 上の Backlog の期限まで(更新前)。`needs_refresh` は保存期限を過ぎている(残り 0 以下)。Backlog を更新するのは `needs_refresh` か `stale_marker` のときだけ。`access_token_changed` は Backlog を更新したときだけ(`false` なら Backlog が同じアクセストークンを返した)。`ttl_basis` は MCP の寿命の決め方: `new_token` は新しい期限 - 60 秒、`backlog_remaining` は Backlog の残り + 5 秒(上限 1800・下限 60)。期限内に `access_token_ttl` が小さくなるのは想定どおり(次の更新を失効直後に来させる) |
 | `{"event":"backlog_unauthorized","backlog_remaining_seconds":N,"stale_marked":bool}` | `/mcp` で Backlog が 401。残り秒数が正なら保存期限より前に失効している(ADR 0001 の未検証 5)。`stale_marked` は次の更新で Backlog を更新させる印を置けたか |
 | `{"event":"backlog_stale_read_failed"}` / `{"event":"backlog_stale_clear_failed"}` | 印(KV)の読み取り・削除の失敗。更新は期限による判定で続く |
+| `{"event":"upload_storage_failed","error":"<例外名>"}` | 添付アップロードの R2(`UPLOAD_BUCKET`)の想定外の失敗(ADR 0018)。PUT は 503、ツールは `generic_error`(`retryable: true`)。例外の文面は upload_id を含みうるので出さない |
+
+**添付アップロードの URL がログに残る**(ADR 0018)。アプリは upload_id をログに出さないが、Workers Logs(`observability`)は `PUT /uploads/<upload_id>` のリクエスト URL を記録する。URL は 60 秒で PUT を受け付けなくなり、1 回 PUT されたら上書きできない(409)ので、漏れても後から使える期間は短い。それでも、ログを見られる人を限り、保持期間をアカウントの設定で確認しておく(保持期間はプランで決まる。公式ドキュメントで確認すること)。
 
 ### 5-2. Backlog の client secret のローテーション
 
@@ -211,6 +240,14 @@ Portal に登録するときの注意:
 | `token:<backlogUserId>:<grantId>:<id>` | Worker が発行した MCP のアクセストークン / リフレッシュトークンの記録(ハッシュ) |
 | `idem:<backlogUserId>:<ツール名>:...` | 書き込みツールの冪等キャッシュ(TTL 5 分。ツールの結果の JSON。ADR 0005) |
 | `backlog-stale:<backlogUserId>:<grantId>` | `/mcp` で Backlog が 401 を返した grant の印(TTL 15 分。値は `1` だけでトークンは入らない)。次の MCP の更新で Backlog も更新し、成功したら消える(ADR 0001 の未検証 5) |
+
+R2(`UPLOAD_BUCKET`。任意。ADR 0018)の中身。どれもライフサイクルルールで 1 日後に消える(手順 2-4):
+
+| 接頭辞 | 内容 |
+|---|---|
+| `ticket/<upload_id>` | prepare が発行したアップロード URL の券(`{uid, expiresAt}`。expiresAt は PUT の受付期限 = prepare から 60 秒)。完了時に消える |
+| `data/<upload_id>` | PUT されたファイルの本文(20 MiB まで)。保存時刻(R2 の `uploaded`)から 15 分以内なら完了できる。完了時に消える |
+| `claim/<upload_id>` | 完了処理の状態(`claimed` / `released` / `attached` / `done`。二重添付を防ぐ)。消さずに残し、ライフサイクルで消える |
 
 ### 5-4. ユーザーの接続を無効化する(grant の削除)
 
@@ -241,6 +278,9 @@ grant を消すと、そのユーザーの MCP トークンは使えなくなり
 | ツールが `permission_error`(403) / `not_found`(404) | そのユーザーの Backlog 権限・存在しない ID |
 | ツールが `api_error`(`retryable: false`)で「範囲を絞る」 | 1 回の呼び出しの Backlog API 上限を超えた。対象のプロジェクトや期間を絞る。無料プランの subrequest 上限(50)に当たっている可能性もある(manual-verification V13) |
 | `response_too_large` | 応答がサイズ上限を超えた。絞り込むか `max_response_tokens` を指定する(ADR 0007) |
+| `issue_attachment_upload_prepare` が出ない | R2 の binding が無い(`LOGBUTLER_UPLOAD_BUCKET_NAME` が未設定)。設定すれば次のデプロイで出る(ADR 0018) |
+| `PUT /uploads/<id>` が 404 / 409 / 411 / 413 | 404: PUT の受付期限切れ(prepare から 60 秒。prepare からやり直す)・未発行・binding なし。409: 2 回目の PUT。411: `Content-Length` が無い(`curl -T` は付ける)。413: 20 MiB 超え。400: 0 バイト、または送った大きさが `Content-Length` と違う。503: R2 の障害や送信の中断(何も保存されないので、prepare から 60 秒以内なら同じ URL で再送できる) |
+| `issue_attachment_upload`(`upload_id`)が `retryable: true` | 未アップロード・処理中・Backlog の失敗。同じ引数で再試行すれば、二重に添付せずに続きから完了する(ADR 0018)。`not_found`(`retryable: false`)は期限切れ(PUT の成功から 15 分超、または PUT されないまま 60 秒超)・別人の upload_id で、prepare からやり直す |
 | 認可画面でエラー | `redirect_uri` の不一致(Backlog のアプリ設定の `https://<domain>/callback`)、`PUBLIC_BASE_URL` の誤りが多い。`mise run verify:oauth` の `metadata` 段階が `PUBLIC_BASE_URL` と接続先の食い違いを検出する |
 
 ### 5-6. 匿名で呼べるエンドポイント

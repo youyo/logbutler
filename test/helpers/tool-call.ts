@@ -3,6 +3,7 @@ import type { StatusCacheDeps } from "../../src/analysis/status-cache";
 import { createBacklogClient } from "../../src/backlog/client";
 import type { IdempotencyDeps } from "../../src/mcp/idempotency";
 import { createMcpServer } from "../../src/mcp/server";
+import type { UploadDeps } from "../../src/uploads/attach";
 import { rpcTo } from "./mcp";
 import { jsonResponse, mockOutboundFetch, type RecordedCall } from "./mock-fetch";
 import { firstText } from "./oauth-flow";
@@ -10,7 +11,7 @@ import { firstText } from "./oauth-flow";
 export const BACKLOG_API = "https://example.backlog.com/api/v2";
 export const TEST_TOKEN = "tok-test-123";
 
-/** 応答の指定。値は JSON 本文、Response、または呼び出しを見て返す関数。 */
+/** 応答の指定。値は JSON 本文、Response、または呼び出しを見て返す関数(Promise も可)。 */
 export type Respond = unknown | Response | ((call: RecordedCall) => Response | unknown);
 
 /**
@@ -61,6 +62,8 @@ export async function callTool(
     statusCache?: StatusCacheDeps;
     /** tools/call の params._meta。 */
     meta?: Record<string, unknown>;
+    /** 添付アップロードの URL 経路の R2(ADR 0018。省略時は binding が無い Worker と同じ)。 */
+    uploads?: UploadDeps;
   } = {},
 ): Promise<ToolRun> {
   const handlers = Object.fromEntries(
@@ -68,9 +71,11 @@ export async function callTool(
       const [method, path] = key.split(" ");
       return [
         `${method} ${BACKLOG_API}${path}`,
-        (call: RecordedCall) => {
+        async (call: RecordedCall) => {
           const v =
-            typeof value === "function" ? (value as (c: RecordedCall) => unknown)(call) : value;
+            typeof value === "function"
+              ? await (value as (c: RecordedCall) => unknown)(call)
+              : value;
           return v instanceof Response ? v : jsonResponse(v);
         },
       ];
@@ -92,6 +97,7 @@ export async function callTool(
         timezone: opts.timezone,
         idempotency: opts.idempotency,
         statusCache: opts.statusCache,
+        uploads: opts.uploads,
       }),
     "tools/call",
     { name, arguments: args, ...(opts.meta ? { _meta: opts.meta } : {}) },

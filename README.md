@@ -5,7 +5,7 @@ Cloudflare Workers 上で動き、利用者ごとに自分の Backlog アカウ�
 前段に Cloudflare MCP Server Portals を置いても、MCP クライアントから直接つないでもよい(Logbutler は DCR 対応の OAuth 付き MCP サーバーとして振る舞う)。
 
 Go 製の Backlog CLI [logvalet](https://github.com/youyo/logvalet) が持つ Remote MCP 機能を TypeScript に移植したもので、
-**87 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
+**88 個のツール**(課題・プロジェクト・Wiki・ドキュメント・分析・digest など)を持つ。logvalet との差分は [docs/tool-diff-from-logvalet.md](docs/tool-diff-from-logvalet.md)。
 
 > **商標について**: Backlog は株式会社ヌーラボの登録商標です。Logbutler は個人プロジェクトであり、株式会社ヌーラボとは無関係です。
 
@@ -21,7 +21,7 @@ MCP クライアント(Portal など)
    │  /register(DCR) /token /mcp /.well-known/*
    ▼
 ┌───────────────────────── Logbutler(Cloudflare Worker) ─────────────────────────┐
-│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(87 ツール)       │
+│ OAuthProvider ──▶ /mcp: Worker 発行トークンを検証 ──▶ MCP サーバー(88 ツール)       │
 │       │                                              │                           │
 │       │ /authorize /callback /healthz (Hono)          └─▶ Backlog API(利用者のトークン) │
 │       ▼                                                                          │
@@ -49,13 +49,13 @@ MCP クライアント(Portal など)
 - [デプロイと運用の手順書](docs/runbook.md)(Backlog の OAuth アプリ登録、KV・ドメイン・secrets・デプロイ、運用)
 - [実機確認リスト](docs/manual-verification.md)(実デプロイしていないため未検証の前提と、その確認手順・記入欄)
 
-## ツール(87 個)
+## ツール(88 個)
 
-`toolsets` で絞り込める(下の「接続 URL のクエリ」)。書き込み・破壊的ツールは `read_only=true` で非公開にできる。`project_settings`(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除。Backlog の管理者権限が必要)も既定で公開され、`read_only=true` で隠れる(ADR 0013)。
+`toolsets` で絞り込める(下の「接続 URL のクエリ」)。書き込み・破壊的ツールは `read_only=true` で非公開にできる。`issue_attachment_upload_prepare` は R2 の binding(`UPLOAD_BUCKET`)がある Worker だけが公開する(無ければ 87 個。ADR 0018)。`project_settings`(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除。Backlog の管理者権限が必要)も既定で公開され、`read_only=true` で隠れる(ADR 0013)。
 
 | toolset | 件数 | ツール(接頭辞 `logbutler_` を省略) |
 |---|---|---|
-| `issue` | 15 | `issue_get` `issue_list` `issue_comment_list` `issue_attachment_list` `issue_attachment_download` `issue_related_list` `issue_create` `issue_update` `issue_comment_add` `issue_comment_update` `issue_related_add` `issue_related_delete` `issue_attachment_delete` `issue_attachment_upload` `issue_delete` |
+| `issue` | 16 | `issue_get` `issue_list` `issue_comment_list` `issue_attachment_list` `issue_attachment_download` `issue_related_list` `issue_create` `issue_update` `issue_comment_add` `issue_comment_update` `issue_related_add` `issue_related_delete` `issue_attachment_delete` `issue_attachment_upload` `issue_attachment_upload_prepare` `issue_delete` |
 | `project` | 4 | `project_get` `project_list` `project_conventions` `project_users` |
 | `user` | 3 | `user_me` `user_list` `user_get` |
 | `activity` | 2 | `activity_list` `user_activity` |
@@ -72,6 +72,14 @@ MCP クライアント(Portal など)
 | `search` | 2 | `document_search` `search` |
 | `notification` | 2 | `notification_list` `notification_count` |
 | `project_settings` | 12 | `category_add` `category_update` `category_delete` `version_add` `version_update` `version_delete` `status_add` `status_update` `status_delete` `custom_field_add` `custom_field_update` `custom_field_delete` |
+
+### 添付ファイルのアップロード(URL 経路)
+
+`issue_attachment_upload` は 2 通りで使える。base64(`file_content_base64`、4 MiB まで)と、LLM に base64 を書き出させない URL 経路(`upload_id`、20 MiB まで。ADR 0018)。URL 経路は shell から Worker に届くクライアント(Claude Code など)向けで、R2 の binding(`UPLOAD_BUCKET`)があるときだけ使える。
+
+1. `issue_attachment_upload_prepare` を呼ぶ(引数なし)。`upload_id`・`upload_url`・`expires_at`・`max_bytes`・`curl` が返る。`upload_url` は **60 秒間有効な秘密の URL**(知っていれば誰でも 1 回だけ PUT できる)なので、共有・記録しない。`expires_at` は PUT を始める期限。
+2. 60 秒以内に、shell で `curl -sS --fail -T <path> '<upload_url>'` を実行する(PUT。2 回目は 409。期限切れは 404 なので prepare からやり直す)。
+3. PUT の成功から 15 分以内に、`issue_attachment_upload` に `issue_key`・`file_name`・`upload_id` を渡す。失敗しても、`retryable: true` のエラーなら同じ引数で再試行できる(二重に添付しない)。
 
 ### 出力のキーの形式
 
@@ -111,6 +119,7 @@ mise run dev            # wrangler dev
 | `PUBLIC_BASE_URL` | var | この Worker の公開オリジン(例 `https://logbutler.example.com`)。issuer とリソース識別子になる |
 | `BACKLOG_CLIENT_ID` | secret | Backlog OAuth クライアント ID |
 | `BACKLOG_CLIENT_SECRET` | secret | Backlog OAuth クライアントシークレット |
+| `UPLOAD_BUCKET` | R2(任意) | 添付アップロードの URL 経路の一時置き場(ADR 0018)。無くても動く(`issue_attachment_upload_prepare` が出ず、`/uploads/*` は 404)。デプロイでは `LOGBUTLER_UPLOAD_BUCKET_NAME` で指定し、ライフサイクルルールが必須(runbook) |
 
 ### 接続 URL のクエリとツール引数(クライアントが決める設定)
 

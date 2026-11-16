@@ -353,7 +353,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
 
     const all = await list();
     expect(await list("all")).toEqual(all);
-    expect(all).toHaveLength(38 + 16 + 11 + 7 + 3 + 12); // M03 の読み取り 38 + M04 の書き込み 14 + ADR 0016 の issue_delete 1 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12
+    expect(all).toHaveLength(38 + 16 + 11 + 7 + 3 + 12 + 1); // M03 の読み取り 38 + M04 の書き込み 14 + ADR 0016 の issue_delete 1 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12 + ADR 0018 の prepare 1(UPLOAD_BUCKET あり)
     expect(all).toContain("logbutler_issue_list");
 
     const wikiOnly = await list("wiki");
@@ -369,6 +369,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
         "logbutler_issue_attachment_download",
         "logbutler_issue_attachment_list",
         "logbutler_issue_attachment_upload",
+        "logbutler_issue_attachment_upload_prepare", // ADR 0018(UPLOAD_BUCKET あり)
         "logbutler_issue_comment_add",
         "logbutler_issue_comment_list",
         "logbutler_issue_comment_update",

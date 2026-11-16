@@ -252,6 +252,68 @@ Logbutler の前段に Cloudflare MCP Server Portals を置く場合だけ実施
 
 ---
 
+## F. 添付アップロードの URL 経路(ADR 0018)
+
+前提: runbook の手順 2-4(R2 バケット・ライフサイクルルール・`LOGBUTLER_UPLOAD_BUCKET_NAME`)を終えてデプロイし、`tools/list` に `logbutler_issue_attachment_upload_prepare` が出ていること。書き込みは検証用プロジェクトでだけ行う。upload_id / upload_url(秘密の URL)を表・Issue・チャットに貼らない。
+
+### V18 通しの流れと、条件付き put の実環境での原子性
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 1)
+- 目的: prepare → `curl -T` → `issue_attachment_upload`(`upload_id`)が実環境で通ること。R2 の条件付き put(`If-None-Match: *` と `etagMatches`)が、本番の R2 でも 1 本だけ通ること(miniflare では unit で確認済み)。
+- 手順: (1) Claude Code など shell の使えるクライアントで、小さなファイルを prepare → `curl -sS --fail -T <path> '<upload_url>'` → 完了の順に添付する。**prepare から curl の開始までが 60 秒(PUT の受付期限)に収まるか**を、Bash の許可の確認が出た場合(人が承認するまで待つ)も含めて記録する。収まらず 404 になったら、prepare からやり直して通るかも見る。(2) 同じ upload_url に 2 回目の PUT をして 409 を確かめる。(3) 別の upload_id で、PUT のあと完了の呼び出しを 2 つの端末からほぼ同時に送る。
+- 期待結果: (1) 課題に 1 つ添付される。(2) 409。(3) 片方が成功し、もう片方は「in progress」(`retryable: true`)か、冪等キャッシュの成功(同じ結果)。課題の添付は 1 つだけ。
+- 結果: 通し [ 成功 / 失敗: ] ／ prepare → curl [ 秒(許可の確認なし) / 秒(あり) ] ／ 2 回目の PUT [ 409 / ] ／ 同時 [ 添付 1 つ / ] ／ 判定 [ OK / NG ] ／ メモ:
+
+### V19 20 MiB の完了が Workers のメモリと client.ts の期限に収まるか
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 2)
+- 目的: 完了処理は R2 の本文(最大 20 MiB)をメモリに読み、Backlog に multipart で送る。Worker のメモリ(128 MB)と、Backlog クライアントの期限(30 秒。`DEFAULT_TIMEOUT_MS`)に収まるか。
+- 手順: 約 19.9 MiB のファイルで V18 の (1) を行う。20 MiB + 1 バイトでは PUT が 413 になることも確かめる。Workers Logs で CPU 時間・メモリのエラーを確認する。
+- 期待結果: 19.9 MiB は成功。超過は 413。`Exceeded Memory` やタイムアウト(`api_error`、`retryable: true`)が出ない。出るなら上限 `MAX_URL_UPLOAD_BYTES` を下げ、ADR 0018 に実測値で固定する。
+- 結果: 19.9 MiB [ 成功 / 失敗: ] ／ 所要時間 [ ] ／ 413 [ 想定どおり / ] ／ 判定 [ OK / NG ] ／ メモ:
+
+### V20 Backlog の添付ファイルの上限
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 3)
+- 目的: Backlog の `POST /space/attachment` が受け付ける大きさの上限(プランで違う可能性)と、超えたときの応答。
+- 手順: V19 の 19.9 MiB が失敗した場合、10 MiB・15 MiB などで上限を探る。エラーの応答(ステータスと `errors[0]`)を記録する。
+- 期待結果: 20 MiB まで受け付ける。受け付けないなら、上限を Backlog に合わせて下げる。
+- 結果: 上限 [ 20 MiB 以上 / ] ／ 超過時の応答 [ ] ／ 判定 [ OK / 要対応 ] ／ メモ:
+
+### V21 消費済みの attachmentId で PATCH したときの Backlog の応答
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 4。attached からの再試行)
+- 目的: 一度課題に結び付けた attachmentId で、もう一度 `PATCH /issues/{key}`(`attachmentId[]`)をしたとき、二重に添付されないか・どの応答になるか。
+- 手順(検証用プロジェクト): `POST /space/attachment` で得た ID を課題に PATCH し、同じ ID で再び PATCH する(Backlog の API を直接呼ぶか、PATCH の応答を落とした状態を再現できるなら Logbutler 経由で)。
+- 期待結果: 4xx で拒否される(Logbutler は「添付済みの可能性。`logbutler_issue_attachment_list` で確認を」と案内する)か、成功しても添付は 1 つのまま。2 つ付くなら ADR 0018 を見直す。
+- 結果: 2 回目の PATCH [ 4xx: / 成功 ] ／ 添付の数 [ 1 / 2 ] ／ 判定 [ OK / NG ] ／ メモ:
+
+### V22 課題に結び付けなかった一時添付が Backlog で消えるか
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 5)
+- 目的: `POST /space/attachment` のあと PATCH しなかった一時ファイル(引き継がれた側・失敗した処理が残しうる)が、Backlog 側で自動的に消えるか。スペースの容量を消費し続けないか。
+- 手順: `POST /space/attachment` だけを行い、`logbutler_space_disk_usage` を記録する。1 日後・数日後に再度記録する(Backlog の公式ドキュメントに記載があればそれを確認する)。
+- 期待結果: 一時ファイルは一定時間で消え、容量に残らない。
+- 結果: [ 消える(時間: )/ 残る ] ／ 判定 [ OK / 要対応 ] ／ メモ:
+
+### V23 R2 の有効化に支払い方法の登録が要るか
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)(未検証の前提 6)、runbook の手順 2-4
+- 目的: 無料プランのアカウントで、R2 を使い始めるのに支払い方法の登録(R2 の有効化)が要るか。要るなら runbook に書く。
+- 手順: R2 を使ったことのないアカウントで `wrangler r2 bucket create` を実行し、エラーや案内を記録する(費用が発生しうる操作なので、ユーザーの判断で行う)。
+- 期待結果: 結果を runbook の手順 2-4 に反映する。
+- 結果: [ 不要 / 必要 ] ／ 判定 [ 記録済み ] ／ メモ:
+
+### V24 ライフサイクルルールと、binding なしでの動作
+
+- 出典: [ADR 0018](adr/0018-attachment-upload-url.md)、runbook の手順 2-4
+- 目的: R2 に `ticket/` `data/` `claim/` を 1 日で消すルールがあること。binding を外したデプロイでも従来どおり動くこと。
+- 手順: (1) `pnpm exec wrangler r2 bucket lifecycle list <bucket>` で 3 つのルールを確認する。PUT だけして完了しなかった upload_id の `data/` が、1〜2 日後に消えていることを確認する(`wrangler r2 object get` などで)。(2) `LOGBUTLER_UPLOAD_BUCKET_NAME` を空にしてデプロイし、`tools/list` から prepare が消え(87 個)、`curl -X PUT $BASE/uploads/<適当な 43 文字>` が 404、base64 の `issue_attachment_upload` が動くことを確かめる。
+- 期待結果: (1) ルール 3 つ、放置した本文が消える。(2) 想定どおり。
+- 結果: ルール [ 3 つ / ] ／ 放置分 [ 消えた / ] ／ binding なし [ OK / ] ／ 判定 [ OK / NG ] ／ メモ:
+
+---
+
 ## 名前の長さ上限(実測)
 
 Backlog の公式 docs に記載がない上限を、2026-10-29 に実 Backlog で 1 文字ずつ確認した値。超えると `HTTP 400 code=7 error.maxLength : name`。
@@ -285,4 +347,11 @@ Logbutler 本体(src)は長さを検証せず、Backlog の応答(`api_error` �
 | V15 | 設定チェック・ログにトークンが出ない | ADR 0010 |
 | V16 | 匿名 `/register` への対策 | ADR 0009 |
 | V17 | 状態一覧キャッシュが空のときの 200 プロジェクトでの所要時間(往復時間・タイムアウトの仮定) | ADR 0016 / 0017 |
+| V18 | 添付の URL 経路の通しと、条件付き put の実環境での原子性 | ADR 0018 |
+| V19 | 20 MiB の完了(メモリ・client.ts の期限) | ADR 0018 |
+| V20 | Backlog の添付ファイルの上限 | ADR 0018 |
+| V21 | 消費済みの attachmentId での PATCH | ADR 0018 |
+| V22 | 結び付けなかった一時添付が消えるか | ADR 0018 |
+| V23 | R2 の有効化に支払い方法の登録が要るか | ADR 0018 |
+| V24 | R2 のライフサイクルルールと binding なしでの動作 | ADR 0018 |
 | P1〜P5 | Portal を使う場合の (a)〜(e) | ADR 0002 / 0008 / 0009 |
