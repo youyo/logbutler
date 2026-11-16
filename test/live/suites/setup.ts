@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { created } from "../helpers/issues";
 import { LiveClient, loadConfig, MARK } from "../helpers/live";
-import { DONE_NAMES, loadSnapshotTools, setWorld, world } from "../helpers/world";
+import { DONE_NAMES, loadSnapshotTools, setWorld, UPLOAD_PREPARE, world } from "../helpers/world";
 
 export function setupSuite(): void {
   describe("setup: 接続とプロジェクト設定", () => {
@@ -84,13 +84,19 @@ export function setupSuite(): void {
       expect(w.meId).toBeGreaterThan(0);
     });
 
-    it("tools/list: 87 個で、スナップショットと名前が一致する", async () => {
+    it("tools/list: 88 個(R2 の UPLOAD_BUCKET が無いデプロイは prepare を除く 87 個)で、スナップショットと名前が一致する", async () => {
       const w = world();
       const r = await w.client.listTools();
       expect(r.status).toBe(200);
       const names = (r.body.result.tools as Array<{ name: string }>).map((t) => t.name).sort();
-      expect(names).toHaveLength(87);
-      expect(names).toEqual(w.snapshotTools.map((t) => t.name).sort());
+      const hasPrepare = names.includes(UPLOAD_PREPARE);
+      expect(names).toHaveLength(hasPrepare ? 88 : 87);
+      expect(names).toEqual(
+        w.snapshotTools
+          .map((t) => t.name)
+          .filter((n) => hasPrepare || n !== UPLOAD_PREPARE)
+          .sort(),
+      );
     });
 
     it("tools/list: すべてのツールに annotations があり、読み取り専用の区分がスナップショットと一致する", async () => {

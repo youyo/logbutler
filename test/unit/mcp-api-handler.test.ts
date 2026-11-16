@@ -239,7 +239,7 @@ describe("MCP API handler (/mcp の下流)", () => {
     });
 
     it("クエリなしなら全ツール", async () => {
-      expect(await names("")).toHaveLength(87);
+      expect(await names("")).toHaveLength(88); // テストの env は UPLOAD_BUCKET あり(prepare を含む)
     });
 
     it("環境変数 LOGBUTLER_* は読まない(クエリが唯一の入口)", async () => {
@@ -247,7 +247,7 @@ describe("MCP API handler (/mcp の下流)", () => {
         { ...env, LOGBUTLER_TOOLSETS: "wiki", LOGBUTLER_READ_ONLY: "true" },
         "",
       );
-      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(87);
+      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(88);
     });
 
     it("未知の toolset は 400 で、理由(悪い名前・有効な名前)を本文に返す。ツールは実行しない", async () => {
@@ -310,5 +310,71 @@ describe("MCP API handler (/mcp の下流)", () => {
       expect(await dueDate({ timezone: "UTC" })).toBe("2026-10-28");
       expect(await dueDate({ timezone: "America/Los_Angeles" })).toBe("2026-10-28");
     });
+  });
+});
+
+describe("添付アップロードの URL 経路(UPLOAD_BUCKET。ADR 0018)", () => {
+  const PREPARE = "logbutler_issue_attachment_upload_prepare";
+  const withoutBucket = () => {
+    const { UPLOAD_BUCKET: _omit, ...rest } = env as unknown as Record<string, unknown>;
+    return rest;
+  };
+  async function toolNames(testEnv: object, query = ""): Promise<string[]> {
+    const res = await listTools(testEnv, query);
+    expect(res.status).toBe(200);
+    return (parseRpcResponse(await res.text()).result?.tools ?? []).map((t) => t.name);
+  }
+  function call(testEnv: object, name: string, args: Record<string, unknown>) {
+    return createMcpApiHandler().fetch(
+      new Request("https://logbutler.test/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: args },
+        }),
+      }),
+      testEnv as typeof env,
+      ctx,
+    );
+  }
+
+  it("binding があれば prepare を公開し、upload_url は PUBLIC_BASE_URL の /uploads/<id>", async () => {
+    expect(await toolNames(env)).toContain(PREPARE);
+    const res = await call(env, PREPARE, {});
+    const text = parseRpcResponse(await res.text()).result?.content?.[0]?.text ?? "";
+    const out = JSON.parse(text) as { upload_id: string; upload_url: string };
+    expect(out.upload_url).toBe(`https://logbutler.test/uploads/${out.upload_id}`);
+  });
+
+  it("binding が無ければ prepare を tools/list に出さない(スキーマは変えない)", async () => {
+    const without = await toolNames(withoutBucket());
+    expect(without).not.toContain(PREPARE);
+    const withBucket = await toolNames(env);
+    expect(without).toEqual(withBucket.filter((n) => n !== PREPARE));
+  });
+
+  it("read_only=true では binding があっても prepare は出ない", async () => {
+    expect(await toolNames(env, "?read_only=true")).not.toContain(PREPARE);
+  });
+
+  it("binding が無い Worker で upload_id を渡すと、Backlog を呼ばずに明確なエラー", async () => {
+    const m = mockOutboundFetch({});
+    const res = await call(withoutBucket(), "logbutler_issue_attachment_upload", {
+      issue_key: "PROJ-1",
+      file_name: "a.txt",
+      upload_id: "A".repeat(43),
+    });
+    const rpc = parseRpcResponse(await res.text());
+    expect(rpc.result?.isError).toBe(true);
+    const envelope = JSON.parse(rpc.result?.content?.[0]?.text ?? "{}");
+    expect(envelope.error.code).toBe("argument_error");
+    expect(envelope.error.message).toContain("file_content_base64");
+    expect(m.calls).toEqual([]);
   });
 });

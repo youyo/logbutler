@@ -3,6 +3,13 @@ import { z } from "zod";
 import { BacklogApiError, type BacklogClient } from "../../backlog/client";
 import { resolveEngagement } from "../../conventions/engagement";
 import { ArgumentError } from "../../errors";
+import { attachUploadedFile } from "../../uploads/attach";
+import {
+  asUploadError,
+  createUploadTicket,
+  MAX_URL_UPLOAD_BYTES,
+  uploadUrl,
+} from "../../uploads/store";
 import {
   nonEmpty,
   optInt,
@@ -463,30 +470,90 @@ function decodeUpload(base64: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/** 添付アップロードの URL 経路(ADR 0018)の案内。prepare の description と応答に同じことを書く。 */
+const UPLOAD_URL_GUIDE =
+  "The upload_url is a secret upload URL (do not share or log it), valid for 60 seconds: start the PUT within 60 seconds (e.g. curl -sS --fail -T <path> '<upload_url>'); if the PUT returns 404, call logbutler_issue_attachment_upload_prepare again. Then, within 15 minutes after the PUT succeeded, call logbutler_issue_attachment_upload with issue_key, file_name and upload_id.";
+
+export const issueAttachmentUploadPrepare = defineTool({
+  name: "logbutler_issue_attachment_upload_prepare",
+  title: "添付ファイルアップロード URL 発行",
+  description: `Prepare a file upload without base64: returns upload_id, upload_url (max ${MAX_URL_UPLOAD_BYTES} bytes) and expires_at (the deadline to start the PUT). ${UPLOAD_URL_GUIDE} For clients that can run a shell command (e.g. curl).`,
+  // 冪等キャッシュ(WriteNonIdempotent)で包むと、同じ URL が 5 分間返り、capability URL が `idem:` に残る。
+  // 呼ぶたびに別の URL を発行するので、注釈だけ idempotentHint=false にする(ADR 0018)。
+  category: "WriteIdempotent",
+  idempotentHint: false,
+  toolset: "issue",
+  inputSchema: z.object({}),
+  handler: async (_a, { uploads, now }) => {
+    if (!uploads) throw uploadsUnavailable();
+    const { id, expiresAt } = await createUploadTicket(uploads.bucket, uploads.userId, now()).catch(
+      (e: unknown) => {
+        throw asUploadError(e);
+      },
+    );
+    const url = uploadUrl(uploads.baseUrl, id);
+    return {
+      upload_id: id,
+      upload_url: url,
+      expires_at: expiresAt.toISOString(),
+      max_bytes: MAX_URL_UPLOAD_BYTES,
+      curl: `curl -sS --fail -T <path> '${url}'`,
+      instructions: UPLOAD_URL_GUIDE,
+    };
+  },
+});
+
+/** binding(UPLOAD_BUCKET)が無い Worker。フラグではなく「機能が物理的に動かない」(ADR 0018)。 */
+function uploadsUnavailable(): ArgumentError {
+  return new ArgumentError(
+    "upload_id is not available on this server (no upload storage is configured). Use file_content_base64 instead.",
+  );
+}
+
 export const issueAttachmentUpload = defineTool({
   name: "logbutler_issue_attachment_upload",
   title: "添付ファイルアップロード",
   // logvalet の説明文から file_paths（サーバー上のパス）の記述を除いた。Workers にはファイルシステムがない。
   description:
-    "Upload a file and attach it to an issue. Specify file_name + file_content_base64 (inline base64 content, decoded size <= 4MB). mime_type is currently advisory and not forwarded to Backlog.",
+    "Upload a file and attach it to an issue. Specify file_name + file_content_base64 (inline base64 content, decoded size <= 4MB), or file_name + upload_id (from logbutler_issue_attachment_upload_prepare, after the file was PUT to its upload_url). mime_type is currently advisory and not forwarded to Backlog.",
   category: "WriteNonIdempotent",
   toolset: "issue",
   inputSchema: z.object({
     issue_key: reqStr("Issue key (e.g. PROJECT-123)"),
     file_name: optStr(
-      "File name for inline upload (e.g. asset9.png). Required when file_content_base64 is set.",
+      "File name for inline upload (e.g. asset9.png). Required when file_content_base64 or upload_id is set.",
     ),
     file_content_base64: optStr(
       "Base64-encoded file content for inline upload. Decoded size must be <= 4MB.",
+    ),
+    upload_id: optStr(
+      "upload_id from logbutler_issue_attachment_upload_prepare (the file must already be PUT to its upload_url). Mutually exclusive with file_content_base64.",
     ),
     mime_type: optStr(
       "MIME type hint (e.g. image/png). Advisory only; Backlog determines content type from filename.",
     ),
   }),
-  handler: async (a, { client }) => {
+  handler: async (a, { client, uploads, now }) => {
+    if (a.upload_id !== undefined && a.file_content_base64 !== undefined) {
+      throw new ArgumentError("specify either file_content_base64 or upload_id, not both");
+    }
+    if (a.upload_id !== undefined) {
+      if (!a.file_name) throw new ArgumentError("file_name is required when upload_id is set");
+      const safeName = attachmentBaseName(a.file_name);
+      if (!uploads) throw uploadsUnavailable();
+      // 401(BacklogUnauthorizedError)などの LogbutlerError はそのまま。R2 の想定外の失敗だけ包む。
+      return attachUploadedFile(uploads, client, now().getTime(), {
+        uploadId: a.upload_id,
+        issueKey: a.issue_key,
+        fileName: a.file_name,
+        safeName,
+      }).catch((e: unknown) => {
+        throw asUploadError(e);
+      });
+    }
     // 空の base64（0 バイト）は decodeUpload が argument_error にする。
     if (a.file_content_base64 === undefined) {
-      throw new ArgumentError("file_content_base64 is required");
+      throw new ArgumentError("file_content_base64 (or upload_id) is required");
     }
     if (!a.file_name)
       throw new ArgumentError("file_name is required when file_content_base64 is set");

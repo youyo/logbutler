@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { selectTools } from "../../src/mcp/registry";
 import { createMcpServer } from "../../src/mcp/server";
+import { ALL_TOOLS } from "../../src/mcp/tools";
 import baseline from "../fixtures/logvalet_tools_list_baseline.json";
 import {
   ALLOWED_CHANGES,
@@ -109,6 +111,9 @@ const M06_TOOLS = ["notification_list", "notification_count", "project_users"].m
 /** ADR 0016 の課題削除ツール。logvalet に無い。 */
 const ADR16_TOOLS = ["issue_delete"].map((n) => `logbutler_${n}`);
 
+/** ADR 0018 の添付アップロード URL の発行。logvalet に無い(UPLOAD_BUCKET の binding がある Worker だけが公開する)。 */
+const ADR18_TOOLS = ["issue_attachment_upload_prepare"].map((n) => `logbutler_${n}`);
+
 /** ADR 0013 のプロジェクト設定ツール 12 個。logvalet に無い(ユーザー決定 2026-10-29)。 */
 const M07_TOOLS = ["category", "version", "status", "custom_field"].flatMap((r) =>
   ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
@@ -130,7 +135,7 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール、ADR 0016 の issue_delete 1 ツール = 87 ツールを公開している", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール、ADR 0016 の issue_delete 1 ツール、ADR 0018 の prepare 1 ツール = 88 ツールを公開している(prepare は UPLOAD_BUCKET があるときだけ)", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
     expect(names).toEqual(
       [
@@ -141,10 +146,30 @@ describe("tools/list スナップショット", () => {
         ...M06_TOOLS,
         ...M07_TOOLS,
         ...ADR16_TOOLS,
+        ...ADR18_TOOLS,
       ].sort(),
     );
-    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12 + 1);
-    expect(names).toHaveLength(87);
+    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12 + 1 + 1);
+    expect(names).toHaveLength(88);
+  });
+
+  it("prepare は WriteIdempotent(冪等キャッシュで包まない)で、注釈だけ idempotentHint=false。toolset は issue、read_only では隠れ、max_response_tokens は付かない(ADR 0018)", async () => {
+    const def = ALL_TOOLS.find((t) => t.name === "logbutler_issue_attachment_upload_prepare");
+    expect(def?.category).toBe("WriteIdempotent");
+    expect(def?.toolset).toBe("issue");
+    expect(def?.responseLimit).toBe(false);
+    const listed = (await listTools()).find(
+      (t) => t.name === "logbutler_issue_attachment_upload_prepare",
+    );
+    expect(listed?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(Object.keys((listed?.inputSchema.properties ?? {}) as object)).toEqual([]);
+    expect(
+      selectTools(ALL_TOOLS, { toolsets: "all", readOnly: true }).map((t) => t.name),
+    ).not.toContain("logbutler_issue_attachment_upload_prepare");
   });
 
   it("M06 の 3 ツールは読み取り専用で、notification_* は notification、project_users は project の toolset", async () => {
@@ -239,7 +264,7 @@ describe("tools/list スナップショット", () => {
     expect(result).toEqual({ missing: [], extra: [], changed: [] });
   });
 
-  it("許容した issue_attachment_upload の差分は、file_paths の削除に伴う 3 か所だけ", async () => {
+  it("許容した issue_attachment_upload の差分は、file_paths の削除に伴う 3 か所と、upload_id の追加(ADR 0018)に伴う 2 か所だけ", async () => {
     const result = compareWithBaseline(
       await listTools(),
       fromLogvaletBaseline(baseline as unknown as Parameters<typeof fromLogvaletBaseline>[0]),
@@ -251,7 +276,9 @@ describe("tools/list スナップショット", () => {
     expect(where.sort()).toEqual([
       "description",
       "inputSchema.properties.file_content_base64.description",
+      "inputSchema.properties.file_name.description",
       "inputSchema.properties.file_paths",
+      "inputSchema.properties.upload_id",
     ]);
   });
 

@@ -62,7 +62,12 @@ export function loadSnapshotTools(): World["snapshotTools"] {
  * - 共有ファイル: 2FA 設定時に別パスワードが必要になるため。
  * - Wiki: このスペースで有効化できない(Backlog 側で EOL)ため。ユーザーが別環境で試し、不具合は issue にする。
  */
+/** 添付アップロードの URL 発行(ADR 0018)。デプロイ先に R2 の UPLOAD_BUCKET があるときだけ公開される。 */
+export const UPLOAD_PREPARE = "logbutler_issue_attachment_upload_prepare";
+
 export const OUT_OF_SCOPE: Record<string, string> = {
+  [UPLOAD_PREPARE]:
+    "添付の URL 経路: R2 の有無で公開が変わり、PUT に shell の curl が要る。実機確認は docs/manual-verification.md",
   logbutler_shared_file_list: "共有ファイル: 2FA 設定時に別パスワードが必要",
   logbutler_shared_file_download: "共有ファイル: 2FA 設定時に別パスワードが必要",
   logbutler_wiki_sharedfile_list: "共有ファイル/Wiki: 2FA 別パスワード・Wiki 有効化不可",

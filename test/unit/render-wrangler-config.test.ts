@@ -23,6 +23,9 @@ const BASE = `{
     /* ローカル用 */
     { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" },
   ],
+  "r2_buckets": [
+    { "binding": "UPLOAD_BUCKET", "bucket_name": "logbutler-uploads-local" }, // 任意(ADR 0018)
+  ],
   "vars": {
     "BACKLOG_SPACE_HOST": "example.backlog.com", // 末尾コメント
     "PUBLIC_BASE_URL": "https://logbutler.example.com",
@@ -130,6 +133,72 @@ describe("renderWranglerConfig: 全項目が埋まる", () => {
 
   it("dry-run 用の EXAMPLE_ENV はそのまま検証を通る", () => {
     expect(renderWranglerConfig(BASE, EXAMPLE_ENV).ok).toBe(true);
+  });
+});
+
+describe("renderWranglerConfig: R2 の UPLOAD_BUCKET(任意。ADR 0018)", () => {
+  const OTHER = '{ "binding": "OTHER_BUCKET", "bucket_name": "other-bucket" }';
+  const withOther = BASE.replace(
+    '{ "binding": "UPLOAD_BUCKET", "bucket_name": "logbutler-uploads-local" },',
+    `{ "binding": "UPLOAD_BUCKET", "bucket_name": "logbutler-uploads-local" }, ${OTHER},`,
+  );
+  const render = (base: string, env: Record<string, string | undefined>) => {
+    const r = renderWranglerConfig(base, env);
+    if (!r.ok) throw new Error(`expected ok: ${JSON.stringify(r.errors)}`);
+    return r.config as Config & { r2_buckets?: unknown[] };
+  };
+
+  it("LOGBUTLER_UPLOAD_BUCKET_NAME があれば bucket_name を差し替える(ほかの R2 binding は残す)", () => {
+    const c = render(withOther, { ...VALID, LOGBUTLER_UPLOAD_BUCKET_NAME: "my-uploads" });
+    expect(c.r2_buckets).toEqual([
+      { binding: "UPLOAD_BUCKET", bucket_name: "my-uploads" },
+      { binding: "OTHER_BUCKET", bucket_name: "other-bucket" },
+    ]);
+  });
+
+  it("無ければ UPLOAD_BUCKET の要素を取り除く(ほかの R2 binding は残す)", () => {
+    const c = render(withOther, VALID);
+    expect(c.r2_buckets).toEqual([{ binding: "OTHER_BUCKET", bucket_name: "other-bucket" }]);
+  });
+
+  it("空文字・空白だけなら無いものとして扱う(GitHub の未設定 Variable は空文字になる)", () => {
+    const c = render(withOther, { ...VALID, LOGBUTLER_UPLOAD_BUCKET_NAME: "  " });
+    expect(c.r2_buckets).toEqual([{ binding: "OTHER_BUCKET", bucket_name: "other-bucket" }]);
+  });
+
+  it("取り除いて空になったら r2_buckets ごと消す", () => {
+    expect(render(BASE, VALID).r2_buckets).toBeUndefined();
+  });
+
+  it("wrangler.jsonc に UPLOAD_BUCKET が無くても、名前があれば足す", () => {
+    const base = BASE.replace(
+      '{ "binding": "UPLOAD_BUCKET", "bucket_name": "logbutler-uploads-local" }, // 任意(ADR 0018)',
+      "",
+    );
+    const c = render(base, { ...VALID, LOGBUTLER_UPLOAD_BUCKET_NAME: "my-uploads" });
+    expect(c.r2_buckets).toEqual([{ binding: "UPLOAD_BUCKET", bucket_name: "my-uploads" }]);
+  });
+
+  it.each(["My_Bucket", "ab", "-bucket", "bucket-", "a".repeat(64), "bucket.name"])(
+    "形式不正 (%s) は invalid",
+    (value) => {
+      expect(errorsOf({ ...VALID, LOGBUTLER_UPLOAD_BUCKET_NAME: value })).toEqual([
+        { name: "LOGBUTLER_UPLOAD_BUCKET_NAME", reason: "invalid" },
+      ]);
+    },
+  );
+
+  it("プレースホルダは placeholder", () => {
+    expect(errorsOf({ ...VALID, LOGBUTLER_UPLOAD_BUCKET_NAME: "<bucket>" })).toEqual([
+      { name: "LOGBUTLER_UPLOAD_BUCKET_NAME", reason: "placeholder" },
+    ]);
+  });
+
+  it("dry-run 用の EXAMPLE_ENV はバケット名を持つ(deploy:check は「あり」と「なし」の両方を通す)", () => {
+    expect(EXAMPLE_ENV.LOGBUTLER_UPLOAD_BUCKET_NAME).toBeTruthy();
+    expect(render(BASE, EXAMPLE_ENV).r2_buckets).toEqual([
+      { binding: "UPLOAD_BUCKET", bucket_name: EXAMPLE_ENV.LOGBUTLER_UPLOAD_BUCKET_NAME },
+    ]);
   });
 });
 

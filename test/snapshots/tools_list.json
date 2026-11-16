@@ -844,7 +844,7 @@
   },
   {
     "name": "logbutler_issue_attachment_upload",
-    "description": "Upload a file and attach it to an issue. Specify file_name + file_content_base64 (inline base64 content, decoded size <= 4MB). mime_type is currently advisory and not forwarded to Backlog.",
+    "description": "Upload a file and attach it to an issue. Specify file_name + file_content_base64 (inline base64 content, decoded size <= 4MB), or file_name + upload_id (from logbutler_issue_attachment_upload_prepare, after the file was PUT to its upload_url). mime_type is currently advisory and not forwarded to Backlog.",
     "inputSchema": {
       "properties": {
         "file_content_base64": {
@@ -852,7 +852,7 @@
           "type": "string"
         },
         "file_name": {
-          "description": "File name for inline upload (e.g. asset9.png). Required when file_content_base64 is set.",
+          "description": "File name for inline upload (e.g. asset9.png). Required when file_content_base64 or upload_id is set.",
           "type": "string"
         },
         "issue_key": {
@@ -861,6 +861,10 @@
         },
         "mime_type": {
           "description": "MIME type hint (e.g. image/png). Advisory only; Backlog determines content type from filename.",
+          "type": "string"
+        },
+        "upload_id": {
+          "description": "upload_id from logbutler_issue_attachment_upload_prepare (the file must already be PUT to its upload_url). Mutually exclusive with file_content_base64.",
           "type": "string"
         }
       },
@@ -875,6 +879,22 @@
       "openWorldHint": true,
       "readOnlyHint": false,
       "title": "添付ファイルアップロード"
+    }
+  },
+  {
+    "name": "logbutler_issue_attachment_upload_prepare",
+    "description": "Prepare a file upload without base64: returns upload_id, upload_url (max 20971520 bytes) and expires_at (the deadline to start the PUT). The upload_url is a secret upload URL (do not share or log it), valid for 60 seconds: start the PUT within 60 seconds (e.g. curl -sS --fail -T <path> '<upload_url>'); if the PUT returns 404, call logbutler_issue_attachment_upload_prepare again. Then, within 15 minutes after the PUT succeeded, call logbutler_issue_attachment_upload with issue_key, file_name and upload_id. For clients that can run a shell command (e.g. curl).",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "添付ファイルアップロード URL 発行"
     }
   },
   {

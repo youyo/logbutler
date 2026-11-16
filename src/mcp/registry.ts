@@ -7,6 +7,7 @@ import type { z } from "zod";
 import type { StatusCacheDeps } from "../analysis/status-cache";
 import { type BacklogClient, BacklogUnauthorizedError } from "../backlog/client";
 import { ArgumentError, LogbutlerError, QueryError, toErrorEnvelope } from "../errors";
+import type { UploadDeps } from "../uploads/attach";
 import { assertTimezone } from "./args";
 import {
   explicitKeyFrom,
@@ -99,6 +100,8 @@ export interface ToolContext {
   spaceHost: string;
   /** 状態一覧の KV キャッシュ(ADR 0016)。未設定ならキャッシュなし。 */
   statusCache?: StatusCacheDeps;
+  /** 添付アップロードの URL 経路の R2 と利用者(ADR 0018)。binding が無い Worker では未設定。 */
+  uploads?: UploadDeps;
 }
 
 export interface ToolDefinitionInput<S extends z.ZodObject> {
@@ -282,6 +285,8 @@ export interface RegisterDeps {
   idempotency?: IdempotencyDeps;
   /** 状態一覧の KV キャッシュ(`statuses:<ユーザーID>`。ADR 0016)。省略時はキャッシュしない。 */
   statusCache?: StatusCacheDeps;
+  /** 添付アップロードの URL 経路の R2(ADR 0018)。省略時は binding が無い Worker と同じ扱い。 */
+  uploads?: UploadDeps;
 }
 
 function textResult(text: string, isError = false) {
@@ -355,6 +360,7 @@ export function registerTools(
             client,
             spaceHost: deps.spaceHost ?? "",
             ...(deps.statusCache ? { statusCache: deps.statusCache } : {}),
+            ...(deps.uploads ? { uploads: deps.uploads } : {}),
             now: deps.now ?? (() => new Date()),
             timezone:
               typeof tzArg === "string" ? assertTimezone(tzArg) : deps.timezone || DEFAULT_TIMEZONE,

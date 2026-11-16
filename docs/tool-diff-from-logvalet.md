@@ -19,6 +19,7 @@ M04 で移植した書き込み・破壊的ツール 14 個と `project_conventi
 - `description`: 「Specify EITHER file_paths (...) OR file_name + file_content_base64」から file_paths の記述を除いた。
 - `inputSchema.properties.file_paths`: 削除。Workers にはファイルシステムがなく、サーバー上のパスを受け取る意味がない(決定済み事項)。
 - `inputSchema.properties.file_content_base64.description`: 「Mutually exclusive with file_paths.」を除いた。
+- (ADR 0018 で追加)`inputSchema.properties.upload_id`: 追加(URL 経路の完了。`file_content_base64` と排他)。あわせて `description` と `inputSchema.properties.file_name.description` に upload_id を書いた。差分は計 5 か所(テストが固定)。下の「ADR 0018」。
 
 `idempotency_key` は inputSchema に宣言していない(baseline と一致させるため。受け取り方は ADR 0005)。
 
@@ -237,8 +238,9 @@ M07 ではツールを足していない(プロジェクト設定 12 個は M07 
 | ADR 0013(プロジェクト設定) | 12 | 86 | プロジェクト設定ツール |
 | ADR 0016(課題の削除) | 1 | 87 | 下の「ADR 0016」 |
 | ADR 0017(`issue_get` の `detail`。ツールは増えない) | 0 | 87 | 下の「ADR 0017」 |
+| ADR 0018(添付アップロードの URL 発行。R2 の binding があるときだけ公開) | 1 | 88 | 下の「ADR 0018」 |
 
-- 87 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個 + `issue_delete` 1 個。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
+- 88 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個 + `issue_delete` 1 個 + `issue_attachment_upload_prepare` 1 個(R2 の `UPLOAD_BUCKET` が無い Worker では 87 個)。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
 - 全ツールの `tools/list`(description / inputSchema / annotations)は `test/snapshots/tools_list.json` に固定し、logvalet の baseline との差は `ALLOWED_CHANGES` / `ALLOWED_EXTRA` に理由つきで載せたものだけ(`test/helpers/baseline.ts`)。
 - 実機での確認が要る差分(`issue_create` の `priorityId`(確認済み・修正済み)、未公開 API `relatedIssues`、4 MiB アップロード)は [manual-verification.md](manual-verification.md) の V08・V09・V11。
 
@@ -252,3 +254,9 @@ M07 ではツールを足していない(プロジェクト設定 12 個は M07 
 
 - `logbutler_issue_get` の `detail`: 任意の文字列(`full` 既定 / `summary`、それ以外は Backlog を呼ぶ前に `argument_error`)。`full` は logvalet と同じ Backlog の生データ。`summary` は `analysisEnvelope`(resource `issue_get`)で `analysis` は `{ issue }`。`issue` は `issue_list` の summary と同じ 13 項目(snake_case。ユーザーは名前だけ)に `description`(全文。なければ空文字)を足したもの。マッパーは `issue_list` と共有(`src/analysis/issue-summary.ts`)。引数の追加は `ALLOWED_CHANGES` に理由つきで載せ、`tools-list-snapshot.test.ts` が差分を `properties.detail` と `max_response_tokens` の追加だけに固定。
 - `issue_get` / `issue_list` の `detail` の説明に「summary は snake_case」と明記した。キーの形式(生データは camelCase、加工した出力は snake_case)は README の「出力のキーの形式」にも書いた。87 ツールすべての説明は変えない。
+
+## ADR 0018: 添付アップロードの URL 経路
+
+- `logbutler_issue_attachment_upload_prepare`(新規。logvalet にない。toolset `issue`): 引数なし。`{upload_id, upload_url, expires_at, max_bytes, curl, instructions}` を返す。`expires_at` は PUT を始める期限(prepare から 60 秒)。完了は PUT の成功から 15 分以内。カテゴリは WriteIdempotent で、注釈だけ `idempotentHint: false`(呼ぶたびに別の URL。冪等キャッシュで包まない)。R2 の binding(`UPLOAD_BUCKET`)が無い Worker では `tools/list` に出ない。`ALLOWED_EXTRA` に理由つき。
+- `logbutler_issue_attachment_upload` の `upload_id`: prepare の URL に `curl -T` で PUT したファイルを添付する(20 MiB まで。base64 は 4 MiB のまま)。`file_content_base64` と排他(両方・どちらも無しは `argument_error`)。`file_name` は必須。再試行しても二重に添付しないよう、R2 の claim で状態を持つ。base64 の経路の挙動は変えない。
+- `PUT /uploads/:id`(新規の HTTP エンドポイント。OAuth の外側): 201 / 404 / 409 / 411 / 400 / 413。詳細は ADR 0018。

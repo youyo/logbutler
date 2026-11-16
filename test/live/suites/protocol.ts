@@ -206,10 +206,13 @@ export function protocolSuite(): void {
           hidden.status >= 400,
         hidden.text.slice(0, 200),
       ).toBe(true);
+      // 全ツール数は R2 の UPLOAD_BUCKET の有無で 88 / 87(ADR 0018)。クエリなしの一覧と比べる。
+      const total = names(await client.listTools()).length;
+      expect([87, 88]).toContain(total);
       const all = await client.listTools(withQuery("?toolsets=all"));
-      expect(names(all)).toHaveLength(87);
+      expect(names(all)).toHaveLength(total);
       const ro = await client.listTools(withQuery("?read_only=false"));
-      expect(names(ro)).toHaveLength(87);
+      expect(names(ro)).toHaveLength(total);
       const mixedCase = await client.listTools(withQuery("?toolsets=STAR"));
       expect(names(mixedCase)).toEqual(["logbutler_star_add"]);
       // プロジェクト設定ツール 12 個は toolsets=project_settings で出て、read_only=true との組み合わせは 400(ADR 0013)
@@ -245,7 +248,7 @@ export function protocolSuite(): void {
       expect(call.status).toBe(400);
       // 関係のないクエリは無視される
       const ignored = await client.listTools(withQuery("?optimize_context=true"));
-      expect(names(ignored)).toHaveLength(87);
+      expect(names(ignored)).toEqual(names(await client.listTools()));
     });
   });
 

@@ -20,7 +20,9 @@ function project(name: string, include: string) {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
-        miniflare: { bindings: testBindings },
+        // UPLOAD_BUCKET(ADR 0018)は wrangler.jsonc のダミーの r2_buckets からも来るが、テストが頼る binding として明示する。
+        // binding が無い形のテストは、env から外して作る。
+        miniflare: { bindings: testBindings, r2Buckets: ["UPLOAD_BUCKET"] },
       }),
     ],
     test: {

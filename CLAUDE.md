@@ -31,6 +31,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 - GitHub Actions は**コミット SHA で固定**する(`.github/workflows/ci.yml`)。更新時は `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で実在を確かめる。
 - **親子課題(3 階層目)**(ADR 0015): Backlog の `err.editIssue.parentChildIssue.N`(HTTP 400・code=7)は `BacklogApiError` の生成点(`src/backlog/errors.ts`)で `argument_error` に変換する。`issue_update` の `engagement` は、対象が案件の親課題そのもの・祖先(最大 2 段)に案件の親課題がいれば親を変えない。`issue_list` の `include_descendants` は子の ID を集めて「親 ∪ 子」で 1 回取る(親 + 子は 200 ID まで、超えたら `argument_error`)。プロジェクトの設定は `grandchildIssueEnabled`(`logbutler_project_get`)で、孫の有無はこの設定では決め打ちしない。
 - **状態一覧のキャッシュ・課題削除・要約**(ADR 0016 / 0017): 状態一覧(`my_tasks` と `issue_list` の `status_id=not-closed` が使う)は `OAUTH_KV` の `statuses:<backlogUserId>` に 600 秒キャッシュする(`src/analysis/status-cache.ts`。`ToolContext.statusCache` は任意で、未設定ならキャッシュなし。KV の失敗・壊れた値は無視。`status_add` / `status_update` / `status_delete` 成功時にそのユーザーの値を消す)。`createStatusLookup` は Backlog から新しく引いたプロジェクトが 20 件(`STATUS_CACHE_FLUSH_EVERY`)たまるごとと最後に KV へ書く(ADR 0017。途中で失敗・中断しても、引けた分は `finally` で残る)。上限は `MAX_STATUS_PROJECTS` = 200(`my_tasks` と、プロジェクト指定なしの `issue_list`)、`issue_list` で明示したキーは `MAX_STATUS_PROJECT_KEYS` = 100。`maxApiCalls` は `my_tasks` 232・`issue_list` 205(`API_BUDGET`)。`issue_list` の `detail=summary` は description なしの要約をエンベロープで返す(既定の `full` は生の配列)。`issue_get` の `detail=summary`(ADR 0017)は同じ 13 項目 + description 全文(マッパーは `src/analysis/issue-summary.ts` で共有)。`logbutler_issue_delete` は `confirm_issue_key` が `issue_key` と完全一致しなければ Backlog を呼ばずに `argument_error`。
+- **添付アップロードの URL 経路**(ADR 0018): `issue_attachment_upload_prepare`(WriteIdempotent + 注釈だけ `idempotentHint: false`。冪等キャッシュで包むと同じ秘密の URL が返るため)→ `PUT /uploads/:id`(`src/uploads/put.ts`、Hono、OAuth の外側。20 MiB。受付は prepare から 60 秒 = `UPLOAD_PUT_WINDOW_MS`)→ `issue_attachment_upload` の `upload_id`(`file_content_base64` と排他。`src/uploads/attach.ts`。期限は data の保存時刻 = R2 の `uploaded` から 15 分 = `COMPLETE_WINDOW_MS` で、claim が無いときだけ見る)。R2 の binding `UPLOAD_BUCKET` は**任意**(`checkConfig` の必須にしない)。無ければ `api-handler.ts` が prepare を外し、PUT は 404、`upload_id` は `argument_error`。スキーマは変えない(binding の有無はフラグではない)。`claim/<id>` は削除せず、作成は `If-None-Match: *`、以降は自分の put が返した etag で `etagMatches`(本文に nonce。R2 の etag は内容のハッシュ)。401 は包まずに投げ直す。upload_id はログ・KV に出さない。`deploy:render` は `LOGBUTLER_UPLOAD_BUCKET_NAME` が無ければ UPLOAD_BUCKET を取り除く(ADR 0011 の例外)。
 - ツール名の接頭辞は `logbutler_`。
 - **状態・設定の ID を決め打ちしない**(ADR 0012)。テストも `meta_*` で取得するか、`project_settings` のツールでスイート自身が作る(実環境 E2E は名前に `[live <時刻>]` を付け、`afterAll` で必ず消す)。
 
@@ -38,7 +39,7 @@ Logbutler(Backlog 用 Remote MCP サーバー。Cloudflare Workers + KV + Hono)�
 
 ```
 src/index.ts                  default export { fetch }。OAuthProvider を PUBLIC_BASE_URL から作って呼ぶ
-src/app.ts                    Hono: /healthz, /authorize(同意), /callback。Access 連携はない(ADR 0009)
+src/app.ts                    Hono: /healthz, /authorize(同意), /callback, PUT /uploads/:id(ADR 0018)。Access 連携はない(ADR 0009)
 src/auth/authorization-server.ts  OAuthProvider の設定(/mcp は apiHandler、それ以外は app.ts)
 src/auth/backlog-oauth.ts     Backlog の認可 URL・コード交換・リフレッシュ(ローテーション有無の両対応)
 src/auth/token-exchange.ts    tokenExchangeCallback: MCP トークン更新時に Backlog も更新
@@ -50,6 +51,7 @@ src/mcp/response-limit.ts    応答サイズの上限(推定トークン数。AD
 src/mcp/args.ts              ツール共通の引数処理(zod ビルダー・ID 解決・日付・CSV・パスのエスケープ)
 src/mcp/tools/                ツール(toolset ごとに 1 ファイル。`index.ts` の ALL_TOOLS に足す)。分析系 11 個は `analysis.ts`、digest 系 6 個と user_activity は `digest.ts`(定義だけ。ロジックは `src/analysis/`)、公式 MCP 由来の通知系 2 個は `notification.ts`、`project_users` は `project.ts`、課題の書き込み系(`issue_delete` を含む)は `issue-write.ts`、プロジェクト設定 12 個(カテゴリー・バージョン・状態・カスタム属性の add / update / delete。toolset `project_settings`。既定で公開、`read_only=true` で隠れる。ADR 0013)は `project-settings.ts`
 src/config-check.ts          起動時の設定チェック(ADR 0010)。src/index.ts が OAuthProvider の前に呼ぶ
+src/uploads/                  添付アップロードの URL 経路(ADR 0018)。store.ts(R2 のキー・ticket・upload_id・上限)・put.ts(PUT /uploads/:id)・attach.ts(完了の状態遷移)
 scripts/verify-oauth/        実環境の OAuth 確認 CLI(`mise run verify:oauth`)。core.ts(Web 標準 API だけ。入出力は VerifyIo で注入)・args.ts・loopback.ts(node:http)・main.ts(Node 24 の型ストリップで直接実行。TS の enum / parameter property は使わない)
 .github/workflows/ci.yml     lint / test / deploy:check(アクションは SHA 固定)
 .github/workflows/deploy.yml 下流のデプロイ(Variable LOGBUTLER_WORKER_NAME が空の upstream では飛ばす)

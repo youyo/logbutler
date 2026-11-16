@@ -205,7 +205,7 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
     tool: "logbutler_issue_attachment_upload",
     fields: ["description", "inputSchema"],
     reason:
-      "file_paths（サーバー上のファイルパス）は Workers にファイルシステムがないためスキーマから削除し、base64 のみにした（M04 の決定済み事項）。説明文と file_content_base64 の説明から file_paths への言及も除いた。差分の範囲は test/unit/tools-list-snapshot.test.ts で固定している。",
+      "file_paths（サーバー上のファイルパス）は Workers にファイルシステムがないためスキーマから削除し、base64 のみにした（M04 の決定済み事項）。説明文と file_content_base64 の説明から file_paths への言及も除いた。ADR 0018 で、base64 を書き出さずに添付する URL 経路の upload_id(file_content_base64 と排他)を足し、説明文と file_name の説明にも upload_id を書いた。差分の範囲は test/unit/tools-list-snapshot.test.ts で固定している。",
   },
   {
     tool: "logbutler_star_add",
@@ -286,6 +286,8 @@ export const ALLOWED_EXTRA: readonly string[] = [
   ...["category", "version", "status", "custom_field"].flatMap((r) =>
     ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
   ),
+  // ADR 0018: 添付アップロードの URL 発行(logvalet にない)。UPLOAD_BUCKET の binding がある Worker だけが公開する。
+  "logbutler_issue_attachment_upload_prepare",
 ];
 
 export function compareWithBaseline(

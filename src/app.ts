@@ -14,6 +14,7 @@ import { renderConsentPage } from "./auth/consent-page";
 import type { GrantProps } from "./auth/props";
 import { BacklogApiError, createBacklogClient } from "./backlog/client";
 import type { Env } from "./env";
+import { handleUploadPut } from "./uploads/put";
 import { callbackUrl } from "./urls";
 
 type AppEnv = { Bindings: Env };
@@ -43,6 +44,12 @@ function errorPage(status: number, message: string): Response {
 export const app = new Hono<AppEnv>();
 
 app.get("/healthz", (c) => c.json({ status: "ok" }));
+
+// --- PUT /uploads/:id: 添付アップロードの URL 経路(ADR 0018)。URL が秘密の capability で、OAuth の外側 ---
+// 他のメソッド(GET など)は作らない。binding が無ければ 404。
+app.put("/uploads/:id", (c) =>
+  handleUploadPut(c.req.raw, c.env.UPLOAD_BUCKET, c.req.param("id"), Date.now()),
+);
 
 // --- GET /authorize: 同意画面 ---
 app.get("/authorize", async (c) => {

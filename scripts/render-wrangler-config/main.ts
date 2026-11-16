@@ -3,20 +3,23 @@
 // ロジックは core.ts。ここは引数・ファイル入出力・終了コードだけ。
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
-import { EXAMPLE_ENV, formatErrors, renderWranglerConfig } from "./core.ts";
+import { ENV_NAMES, EXAMPLE_ENV, formatErrors, renderWranglerConfig } from "./core.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 
 interface Args {
   example: boolean;
+  /** R2 の UPLOAD_BUCKET を持たない形で生成する(LOGBUTLER_UPLOAD_BUCKET_NAME を無いものとして扱う。ADR 0018)。 */
+  noUploadBucket: boolean;
   out?: string;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { example: false };
+  const args: Args = { example: false, noUploadBucket: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--example") args.example = true;
+    else if (a === "--no-upload-bucket") args.noUploadBucket = true;
     else if (a === "--out") {
       const v = argv[++i];
       if (!v) throw new Error("--out にはパスが要ります");
@@ -32,14 +35,15 @@ async function main(): Promise<number> {
     args = parseArgs(process.argv.slice(2));
   } catch (e) {
     console.error(e instanceof Error ? e.message : e);
-    console.error("使い方: render-wrangler-config [--example] [--out <path>]");
+    console.error("使い方: render-wrangler-config [--example] [--no-upload-bucket] [--out <path>]");
     return 2;
   }
 
   const outName =
     args.out ?? (args.example ? "wrangler.deploy.example.jsonc" : "wrangler.deploy.jsonc");
   const out = isAbsolute(outName) ? outName : join(ROOT, outName);
-  const env = args.example ? EXAMPLE_ENV : process.env;
+  const env: Record<string, string | undefined> = { ...(args.example ? EXAMPLE_ENV : process.env) };
+  if (args.noUploadBucket) delete env[ENV_NAMES.uploadBucketName];
 
   const base = await readFile(join(ROOT, "wrangler.jsonc"), "utf8");
   const result = renderWranglerConfig(base, env);

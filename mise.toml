@@ -43,10 +43,13 @@ description = "デプロイ用の wrangler 設定 (wrangler.deploy.jsonc、gitig
 run = "node scripts/render-wrangler-config/main.ts"
 
 [tasks."deploy:check"]
-description = "デプロイ設定の生成と wrangler の dry-run を、ダミー値で検証する (環境変数・秘密情報は不要。Cloudflare へは何も変更しない)"
+description = "デプロイ設定の生成と wrangler の dry-run を、ダミー値で検証する (R2 の UPLOAD_BUCKET あり・なしの 2 形。環境変数・秘密情報は不要。Cloudflare へは何も変更しない)"
 run = [
   "node scripts/render-wrangler-config/main.ts --example",
   "pnpm exec wrangler deploy --dry-run -c wrangler.deploy.example.jsonc --outdir dist",
+  # R2 の UPLOAD_BUCKET(任意。ADR 0018)を持たない形も通す
+  "node scripts/render-wrangler-config/main.ts --example --no-upload-bucket --out wrangler.deploy.example-nobucket.jsonc",
+  "pnpm exec wrangler deploy --dry-run -c wrangler.deploy.example-nobucket.jsonc --outdir dist",
 ]
 
 [tasks.deploy]
