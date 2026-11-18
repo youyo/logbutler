@@ -17,8 +17,28 @@ export const worker = {
     entry.default.fetch(url, { redirect: "manual", ...init }),
 };
 
+/**
+ * OAuth の通しを流す相手(Worker の入口と、その公開 URL のオリジン)。既定はテストの wrangler 設定の Worker。
+ * env を変えた Worker(`import worker from "../../src/index"` に別の env を渡す)で通すときに差し替える。
+ */
+export interface FlowTarget {
+  fetch: (url: string, init?: RequestInit) => Promise<Response>;
+  /** PUBLIC_BASE_URL と同じオリジン。`/mcp` がリソース識別子になる。 */
+  origin: string;
+}
+export const DEFAULT_TARGET: FlowTarget = { fetch: worker.fetch, origin: ORIGIN };
+
 /** Backlog の outbound fetch モックを用意する。 */
-export async function setupMocks(opts: { backlogToken?: (call: RecordedCall) => Response } = {}) {
+export async function setupMocks(
+  opts: {
+    backlogToken?: (call: RecordedCall) => Response;
+    /** Backlog スペースのオリジン(既定 BACKLOG_HOST)。env の BACKLOG_SPACE_HOST を変えた Worker 用。 */
+    backlogHost?: string;
+    /** /users/myself の応答(既定は alice)。 */
+    myself?: Record<string, unknown>;
+  } = {},
+) {
+  const host = opts.backlogHost ?? BACKLOG_HOST;
   const backlogToken =
     opts.backlogToken ??
     (() =>
@@ -29,11 +49,18 @@ export async function setupMocks(opts: { backlogToken?: (call: RecordedCall) => 
         expires_in: 3600,
       }));
   const mocks = mockOutboundFetch({
-    [BACKLOG_TOKEN]: (call) => backlogToken(call),
-    [BACKLOG_MYSELF]: (call) =>
+    [`POST ${host}/api/v2/oauth2/token`]: (call) => backlogToken(call),
+    [`GET ${host}/api/v2/users/myself`]: (call) =>
       call.headers.get("authorization") === "Bearer backlog-at-1" ||
       call.headers.get("authorization")?.startsWith("Bearer backlog-at-")
-        ? jsonResponse({ id: 42, userId: "alice", name: "Alice", mailAddress: "alice@example.com" })
+        ? jsonResponse(
+            opts.myself ?? {
+              id: 42,
+              userId: "alice",
+              name: "Alice",
+              mailAddress: "alice@example.com",
+            },
+          )
         : jsonResponse({}, 401),
   });
   return mocks;
@@ -70,8 +97,11 @@ export async function pkcePair() {
   return { verifier, challenge: base64url(new Uint8Array(digest)) };
 }
 
-export async function registerClient(clientName = "Test MCP Client"): Promise<string> {
-  const res = await worker.fetch(`${ORIGIN}/register`, {
+export async function registerClient(
+  clientName = "Test MCP Client",
+  target: FlowTarget = DEFAULT_TARGET,
+): Promise<string> {
+  const res = await target.fetch(`${target.origin}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -95,12 +125,13 @@ export interface TokenSet {
 }
 
 /** /register → /authorize(同意)→ Backlog(モック)→ /callback → /token を通しで行う。 */
-export async function runAuthorizationFlow() {
-  const clientId = await registerClient();
+export async function runAuthorizationFlow(target: FlowTarget = DEFAULT_TARGET) {
+  const { origin } = target;
+  const clientId = await registerClient(undefined, target);
   const { verifier, challenge } = await pkcePair();
   const jar = new CookieJar();
 
-  const authorizeUrl = new URL(`${ORIGIN}/authorize`);
+  const authorizeUrl = new URL(`${origin}/authorize`);
   authorizeUrl.search = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
@@ -108,17 +139,17 @@ export async function runAuthorizationFlow() {
     state: "client-state-1",
     code_challenge: challenge,
     code_challenge_method: "S256",
-    resource: MCP_URL,
+    resource: `${origin}/mcp`,
   }).toString();
 
-  const consent = await worker.fetch(authorizeUrl.toString());
+  const consent = await target.fetch(authorizeUrl.toString());
   expect(consent.status).toBe(200);
   jar.update(consent);
   const html = await consent.clone().text();
   const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1] ?? "";
   expect(handle).not.toBe("");
 
-  const backlogRedirect = await worker.fetch(`${ORIGIN}/authorize`, {
+  const backlogRedirect = await target.fetch(`${origin}/authorize`, {
     method: "POST",
     headers: {
       Cookie: jar.header(),
@@ -128,16 +159,16 @@ export async function runAuthorizationFlow() {
   });
   jar.update(backlogRedirect);
   const backlogLocation = backlogRedirect.headers.get("Location") ?? "";
-  const state = new URL(backlogLocation, ORIGIN).searchParams.get("state") ?? "";
+  const state = new URL(backlogLocation, origin).searchParams.get("state") ?? "";
 
-  const callbackResponse = await worker.fetch(
-    `${ORIGIN}/callback?code=backlog-code&state=${encodeURIComponent(state)}`,
+  const callbackResponse = await target.fetch(
+    `${origin}/callback?code=backlog-code&state=${encodeURIComponent(state)}`,
     { headers: { Cookie: jar.header() } },
   );
   const back = callbackResponse.headers.get("Location") ?? "";
-  const clientCode = new URL(back, ORIGIN).searchParams.get("code") ?? "";
+  const clientCode = new URL(back, origin).searchParams.get("code") ?? "";
 
-  const tokenResponse = await worker.fetch(`${ORIGIN}/token`, {
+  const tokenResponse = await target.fetch(`${origin}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -146,7 +177,7 @@ export async function runAuthorizationFlow() {
       client_id: clientId,
       redirect_uri: CLIENT_REDIRECT,
       code_verifier: verifier,
-      resource: MCP_URL,
+      resource: `${origin}/mcp`,
     }),
   });
 
@@ -158,8 +189,9 @@ export function mcpRequest(
   method: string,
   params: Record<string, unknown> = {},
   url: string = MCP_URL,
+  fetch: FlowTarget["fetch"] = worker.fetch,
 ): Promise<Response> {
-  return worker.fetch(url, {
+  return fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

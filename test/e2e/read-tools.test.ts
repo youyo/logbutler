@@ -353,7 +353,7 @@ describe("E2E 9: 読み取りツール(M03)が OAuth 済みトークンの /mcp 
 
     const all = await list();
     expect(await list("all")).toEqual(all);
-    expect(all).toHaveLength(38 + 16 + 11 + 7 + 3 + 12 + 1); // M03 の読み取り 38 + M04 の書き込み 14 + ADR 0016 の issue_delete 1 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12 + ADR 0018 の prepare 1(UPLOAD_BUCKET あり)
+    expect(all).toHaveLength(38 + 16 + 11 + 7 + 3 + 12 + 1 + 1); // M03 の読み取り 38 + M04 の書き込み 14 + ADR 0016 の issue_delete 1 と project_conventions + M05A の分析 11 + M05B の digest・検索 7 + M06 の 3 + プロジェクト設定 12 + ADR 0018 の prepare 1(UPLOAD_BUCKET あり)+ ADR 0019 の feedback 1
     expect(all).toContain("logbutler_issue_list");
 
     const wikiOnly = await list("wiki");

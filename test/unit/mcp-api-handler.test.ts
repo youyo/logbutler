@@ -239,7 +239,7 @@ describe("MCP API handler (/mcp の下流)", () => {
     });
 
     it("クエリなしなら全ツール", async () => {
-      expect(await names("")).toHaveLength(88); // テストの env は UPLOAD_BUCKET あり(prepare を含む)
+      expect(await names("")).toHaveLength(89); // テストの env は UPLOAD_BUCKET あり(prepare を含む)。ADR 0019 の feedback を含む
     });
 
     it("環境変数 LOGBUTLER_* は読まない(クエリが唯一の入口)", async () => {
@@ -247,7 +247,7 @@ describe("MCP API handler (/mcp の下流)", () => {
         { ...env, LOGBUTLER_TOOLSETS: "wiki", LOGBUTLER_READ_ONLY: "true" },
         "",
       );
-      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(88);
+      expect(parseRpcResponse(await res.text()).result?.tools).toHaveLength(89);
     });
 
     it("未知の toolset は 400 で、理由(悪い名前・有効な名前)を本文に返す。ツールは実行しない", async () => {

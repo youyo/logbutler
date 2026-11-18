@@ -175,7 +175,7 @@ describe("E2E: UPLOAD_BUCKET の binding が無い Worker", () => {
     const names = await toolNames(await viaBucketless(MCP_URL, rpcInit(token, "tools/list", {})));
     expect(names).not.toContain(PREPARE);
     expect(names).toContain(UPLOAD);
-    expect(names).toHaveLength(87);
+    expect(names).toHaveLength(88); // ADR 0019 の feedback を含む
 
     const put = await viaBucketless(`${ORIGIN}/uploads/${"A".repeat(43)}`, putInit("x"));
     expect(put.status).toBe(404);

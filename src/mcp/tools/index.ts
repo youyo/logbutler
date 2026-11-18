@@ -23,6 +23,7 @@ import {
   userActivity,
 } from "./digest";
 import { documentCreate, documentGet, documentList, documentTree } from "./document";
+import { feedback } from "./feedback";
 import {
   issueAttachmentDownload,
   issueAttachmentList,
@@ -159,4 +160,6 @@ export const ALL_TOOLS: readonly ToolDefinition[] = [
   projectUsers,
   // ADR 0013: プロジェクト設定ツール 12 個(カテゴリー・バージョン・状態・カスタム属性の追加・更新・削除)
   ...PROJECT_SETTINGS_TOOLS,
+  // ADR 0019: 上流の公開リポジトリへの issue 起票の案内(issue は作らない。GitHub とも通信しない)
+  feedback,
 ];

@@ -43,6 +43,7 @@ export const TOOLSETS = [
   "search",
   "notification",
   "project_settings",
+  "feedback",
 ] as const;
 export type Toolset = (typeof TOOLSETS)[number];
 
@@ -116,6 +117,11 @@ export interface ToolDefinitionInput<S extends z.ZodObject> {
    * 注釈だけを実態に合わせたいとき用(例: star_add は同じ対象に 2 回付けるとスターが 2 個になる)。
    */
   idempotentHint?: boolean;
+  /**
+   * 注釈の openWorldHint をカテゴリの既定(true)から上書きする。外部と通信しないツール用
+   * (例: feedback は案内の文字列を返すだけで、Backlog にも GitHub にも通信しない。ADR 0019)。
+   */
+  openWorldHint?: boolean;
   toolset: Toolset;
   inputSchema: S;
   /**
@@ -146,8 +152,11 @@ export interface ToolDefinition {
   readonly handler: (args: unknown, ctx: ToolContext) => Promise<unknown>;
 }
 
-/** `logbutler_<resource>_<action>`。例外は logvalet の baseline にある `logbutler_search`(action なし)だけ。 */
-const TOOL_NAME = /^logbutler_(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|search)$/;
+/**
+ * `logbutler_<resource>_<action>`。例外(action なし)は、logvalet の baseline にある `logbutler_search` と、
+ * 製品をまたいで `<製品>_feedback` に揃える `logbutler_feedback`(ADR 0019)だけ。
+ */
+const TOOL_NAME = /^logbutler_(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|search|feedback)$/;
 
 export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>): ToolDefinition {
   if (!TOOL_NAME.test(input.name)) {
@@ -167,6 +176,7 @@ export function defineTool<S extends z.ZodObject>(input: ToolDefinitionInput<S>)
     annotations: {
       ...annotationsFor(input.category, input.title),
       ...(input.idempotentHint === undefined ? {} : { idempotentHint: input.idempotentHint }),
+      ...(input.openWorldHint === undefined ? {} : { openWorldHint: input.openWorldHint }),
     },
     handler: (args, ctx) => input.handler(args as z.infer<S>, ctx),
   };

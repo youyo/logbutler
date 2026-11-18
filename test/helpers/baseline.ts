@@ -273,7 +273,7 @@ export const ALLOWED_CHANGES: readonly AllowedChange[] = [
 ];
 
 export const ALLOWED_MISSING: readonly string[] = [];
-/** logvalet に無い追加ツール(docs/tool-diff-from-logvalet.md)。M06: Nulab 公式 MCP から取り込んだ 3 ツール。ADR 0013: プロジェクト設定 12 ツール。 */
+/** logvalet に無い追加ツール(docs/tool-diff-from-logvalet.md)。M06: Nulab 公式 MCP から取り込んだ 3 ツール。ADR 0013: プロジェクト設定 12 ツール。ADR 0016 / 0018 / 0019 の各 1 ツール。 */
 export const ALLOWED_EXTRA: readonly string[] = [
   "logbutler_notification_list",
   "logbutler_notification_count",
@@ -288,6 +288,8 @@ export const ALLOWED_EXTRA: readonly string[] = [
   ),
   // ADR 0018: 添付アップロードの URL 発行(logvalet にない)。UPLOAD_BUCKET の binding がある Worker だけが公開する。
   "logbutler_issue_attachment_upload_prepare",
+  // ADR 0019: 上流の公開リポジトリへの issue 起票の案内(logvalet にない)。issue は作らず、GitHub とも通信しない。
+  "logbutler_feedback",
 ];
 
 export function compareWithBaseline(
