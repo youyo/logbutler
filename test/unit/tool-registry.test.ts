@@ -144,6 +144,28 @@ describe("defineTool", () => {
     expect(() => defineTool({ ...base, name: "logbutler_searching" })).toThrow(/logbutler_/);
   });
 
+  it("feedback も search と同じ形の例外(action なし)。似た綴りは拒否のまま(ADR 0019 の C1)", () => {
+    expect(() => defineTool({ ...base, name: "logbutler_feedback" })).not.toThrow();
+    expect(() => defineTool({ ...base, name: "logbutler_feedbacks" })).toThrow(/logbutler_/);
+    expect(() => defineTool({ ...base, name: "logbutler_Feedback" })).toThrow(/logbutler_/);
+    expect(() => defineTool({ ...base, name: "logbutler_feedback-x" })).toThrow(/logbutler_/);
+    expect(() => defineTool({ ...base, name: "logvalet_feedback" })).toThrow(/logbutler_/);
+  });
+
+  it("openWorldHint はカテゴリの既定(true)を上書きできる。ほかの注釈は変えない(ADR 0019 の C2)", () => {
+    const closed = defineTool({ ...base, name: "logbutler_feedback", openWorldHint: false });
+    expect(closed.annotations).toEqual({
+      title: "t",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    // 省略時はカテゴリの既定のまま
+    expect(defineTool({ ...base, name: "logbutler_issue_get" }).annotations.openWorldHint).toBe(
+      true,
+    );
+  });
+
   it("annotation の title は日本語を渡す想定で、そのまま載る", () => {
     expect(sample.read.annotations.title).toBe("課題詳細取得");
   });
@@ -169,6 +191,7 @@ describe("toolset と環境変数", () => {
       "search",
       "notification",
       "project_settings",
+      "feedback",
     ]);
   });
 

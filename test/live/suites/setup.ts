@@ -84,13 +84,13 @@ export function setupSuite(): void {
       expect(w.meId).toBeGreaterThan(0);
     });
 
-    it("tools/list: 88 個(R2 の UPLOAD_BUCKET が無いデプロイは prepare を除く 87 個)で、スナップショットと名前が一致する", async () => {
+    it("tools/list: 89 個(R2 の UPLOAD_BUCKET が無いデプロイは prepare を除く 88 個)で、スナップショットと名前が一致する", async () => {
       const w = world();
       const r = await w.client.listTools();
       expect(r.status).toBe(200);
       const names = (r.body.result.tools as Array<{ name: string }>).map((t) => t.name).sort();
       const hasPrepare = names.includes(UPLOAD_PREPARE);
-      expect(names).toHaveLength(hasPrepare ? 88 : 87);
+      expect(names).toHaveLength(hasPrepare ? 89 : 88);
       expect(names).toEqual(
         w.snapshotTools
           .map((t) => t.name)

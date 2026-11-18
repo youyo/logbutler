@@ -239,8 +239,9 @@ M07 ではツールを足していない(プロジェクト設定 12 個は M07 
 | ADR 0016(課題の削除) | 1 | 87 | 下の「ADR 0016」 |
 | ADR 0017(`issue_get` の `detail`。ツールは増えない) | 0 | 87 | 下の「ADR 0017」 |
 | ADR 0018(添付アップロードの URL 発行。R2 の binding があるときだけ公開) | 1 | 88 | 下の「ADR 0018」 |
+| ADR 0019(上流への issue 起票の案内 `feedback`) | 1 | 89 | 下の「ADR 0019」 |
 
-- 88 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個 + `issue_delete` 1 個 + `issue_attachment_upload_prepare` 1 個(R2 の `UPLOAD_BUCKET` が無い Worker では 87 個)。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
+- 89 個は logvalet 由来 71 個 + 公式 MCP 由来 3 個 + プロジェクト設定 12 個 + `issue_delete` 1 個 + `issue_attachment_upload_prepare` 1 個 + `feedback` 1 個(R2 の `UPLOAD_BUCKET` が無い Worker では 88 個)。`README.md` の toolset ごとの一覧と `ALL_TOOLS` の一致は `test/unit/readme-tools.test.ts` が固定している。
 - 全ツールの `tools/list`(description / inputSchema / annotations)は `test/snapshots/tools_list.json` に固定し、logvalet の baseline との差は `ALLOWED_CHANGES` / `ALLOWED_EXTRA` に理由つきで載せたものだけ(`test/helpers/baseline.ts`)。
 - 実機での確認が要る差分(`issue_create` の `priorityId`(確認済み・修正済み)、未公開 API `relatedIssues`、4 MiB アップロード)は [manual-verification.md](manual-verification.md) の V08・V09・V11。
 
@@ -260,3 +261,9 @@ M07 ではツールを足していない(プロジェクト設定 12 個は M07 
 - `logbutler_issue_attachment_upload_prepare`(新規。logvalet にない。toolset `issue`): 引数なし。`{upload_id, upload_url, expires_at, max_bytes, curl, instructions}` を返す。`expires_at` は PUT を始める期限(prepare から 60 秒)。完了は PUT の成功から 15 分以内。カテゴリは WriteIdempotent で、注釈だけ `idempotentHint: false`(呼ぶたびに別の URL。冪等キャッシュで包まない)。R2 の binding(`UPLOAD_BUCKET`)が無い Worker では `tools/list` に出ない。`ALLOWED_EXTRA` に理由つき。
 - `logbutler_issue_attachment_upload` の `upload_id`: prepare の URL に `curl -T` で PUT したファイルを添付する(20 MiB まで。base64 は 4 MiB のまま)。`file_content_base64` と排他(両方・どちらも無しは `argument_error`)。`file_name` は必須。再試行しても二重に添付しないよう、R2 の claim で状態を持つ。base64 の経路の挙動は変えない。
 - `PUT /uploads/:id`(新規の HTTP エンドポイント。OAuth の外側): 201 / 404 / 409 / 411 / 400 / 413。詳細は ADR 0018。
+
+## ADR 0019: feedback ツール
+
+- `logbutler_feedback`(新規。logvalet にない。toolset `feedback`。既定の `all` に含まれ、ReadOnly なので `read_only=true` でも見える。`toolsets` で絞ると消える): Logbutler の不具合・要望・質問を、上流の公開リポジトリ `youyo/logbutler` に GitHub issue として起票するための案内を返す。issue は作らず、Backlog にも GitHub にも通信しない(`maxApiCalls` は 0)。
+- 入力は `kind`(`bug` / `feature` / `question` / `other`、省略時 `bug`)だけ。応答は kind だけで決まる固定の JSON(`schema_version` `repository` `server` `kind` `title_template` `body_template` `labels` `anonymization` `steps` `search_url` `create`)で、env・grant の値は入らない(`src/feedback/` の純関数。E2E で、env と grant が異なる 2 つの構成の応答が kind ごとに完全一致することを確かめている)。
+- 注釈は ReadOnly の既定から `openWorldHint` だけを `false` に上書きした(`defineTool` の `openWorldHint`)。`max_response_tokens` は付けない(`responseLimit: false`)。ツール名は `logbutler_<resource>_<action>` の例外(`search` と同じ形)。`ALLOWED_EXTRA` に理由つき。

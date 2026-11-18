@@ -114,6 +114,9 @@ const ADR16_TOOLS = ["issue_delete"].map((n) => `logbutler_${n}`);
 /** ADR 0018 の添付アップロード URL の発行。logvalet に無い(UPLOAD_BUCKET の binding がある Worker だけが公開する)。 */
 const ADR18_TOOLS = ["issue_attachment_upload_prepare"].map((n) => `logbutler_${n}`);
 
+/** ADR 0019 の feedback(上流への issue 起票の案内)。logvalet に無い。 */
+const ADR19_TOOLS = ["feedback"].map((n) => `logbutler_${n}`);
+
 /** ADR 0013 のプロジェクト設定ツール 12 個。logvalet に無い(ユーザー決定 2026-10-29)。 */
 const M07_TOOLS = ["category", "version", "status", "custom_field"].flatMap((r) =>
   ["add", "update", "delete"].map((a) => `logbutler_${r}_${a}`),
@@ -135,7 +138,7 @@ describe("tools/list スナップショット", () => {
     ).toMatchFileSnapshot("../snapshots/tools_list.json");
   });
 
-  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール、ADR 0016 の issue_delete 1 ツール、ADR 0018 の prepare 1 ツール = 88 ツールを公開している(prepare は UPLOAD_BUCKET があるときだけ)", async () => {
+  it("M03 の 38 ツール、M04 の 15 ツール、M05A の 11 ツール、M05B の 7 ツール = logvalet の 71 ツールと、M06 の 3 ツール 、プロジェクト設定の 12 ツール、ADR 0016 の issue_delete 1 ツール、ADR 0018 の prepare 1 ツール、ADR 0019 の feedback 1 ツール = 89 ツールを公開している(prepare は UPLOAD_BUCKET があるときだけ)", async () => {
     const names = (await listTools()).map((t) => t.name).sort();
     expect(names).toEqual(
       [
@@ -147,10 +150,41 @@ describe("tools/list スナップショット", () => {
         ...M07_TOOLS,
         ...ADR16_TOOLS,
         ...ADR18_TOOLS,
+        ...ADR19_TOOLS,
       ].sort(),
     );
-    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12 + 1 + 1);
-    expect(names).toHaveLength(88);
+    expect(names).toHaveLength(38 + 15 + 11 + 7 + 3 + 12 + 1 + 1 + 1);
+    expect(names).toHaveLength(89);
+  });
+
+  it("feedback は ReadOnly(read_only=true でも見える)で toolset feedback、openWorldHint=false、入力は kind だけ(ADR 0019)", async () => {
+    const listed = (await listTools()).find((t) => t.name === "logbutler_feedback");
+    expect(listed?.annotations).toEqual({
+      title: "フィードバック（GitHub issue の起票案内）",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(Object.keys((listed?.inputSchema.properties ?? {}) as object)).toEqual(["kind"]);
+    expect(listed?.inputSchema.required ?? []).toEqual([]);
+    expect(
+      selectTools(ALL_TOOLS, { toolsets: "all", readOnly: true }).map((t) => t.name),
+    ).toContain("logbutler_feedback");
+    expect(
+      selectTools(ALL_TOOLS, { toolsets: new Set(["issue"]), readOnly: false }).map((t) => t.name),
+    ).not.toContain("logbutler_feedback");
+    expect(
+      selectTools(ALL_TOOLS, { toolsets: new Set(["feedback"]), readOnly: true }).map(
+        (t) => t.name,
+      ),
+    ).toEqual(["logbutler_feedback"]);
+  });
+
+  it("annotations の openWorldHint が false なのは feedback だけ(ほかのツールの注釈は変えていない)", async () => {
+    const closed = (await listTools())
+      .filter((t) => (t.annotations as { openWorldHint?: boolean }).openWorldHint !== true)
+      .map((t) => t.name);
+    expect(closed).toEqual(["logbutler_feedback"]);
   });
 
   it("prepare は WriteIdempotent(冪等キャッシュで包まない)で、注釈だけ idempotentHint=false。toolset は issue、read_only では隠れ、max_response_tokens は付かない(ADR 0018)", async () => {
@@ -377,9 +411,9 @@ describe("tools/list スナップショット", () => {
     ).toEqual(["inputSchema.properties.detail", "inputSchema.properties.max_response_tokens"]);
   });
 
-  it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個を除く)にだけあり、差分は properties の追加だけ", async () => {
+  it("max_response_tokens は読み取りツール 55 個(ダウンロード系 2 個と feedback を除く)にだけあり、差分は properties の追加だけ", async () => {
     const tools = await listTools();
-    // 引数を持つツール = ReadOnly の annotation を持つツールからダウンロード系を除いたもの(M06 の 3 ツールを含む)
+    // 引数を持つツール = ReadOnly の annotation を持つツールからダウンロード系と feedback(入力は kind だけ。ADR 0019)を除いたもの(M06 の 3 ツールを含む)
     const withArg = tools
       .filter((t) => "max_response_tokens" in (t.inputSchema.properties as object))
       .map((t) => t.name)
@@ -388,6 +422,7 @@ describe("tools/list スナップショット", () => {
       .filter((t) => t.annotations?.readOnlyHint === true)
       .map((t) => t.name)
       .filter((n) => !/_attachment_download$|_shared_file_download$/.test(n))
+      .filter((n) => !ADR19_TOOLS.includes(n))
       .sort();
     expect(withArg).toEqual(readOnly);
     expect(withArg).toEqual([...RESPONSE_LIMIT_TOOLS, ...M06_TOOLS].sort());

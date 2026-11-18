@@ -26,6 +26,8 @@ M05 の上限つき取得(ページ数の上限と `truncated`)が一次の対�
   - 書き込み・破壊的ツール(WriteIdempotent / WriteNonIdempotent / Destructive)。引数も付けない。書き込みが成功したあとで
     応答が大きいことをエラーにすると、実行済みの書き込みが失敗に見え、再実行で二重に書き込まれる。
   - エラーエンベロープ。
+  - `logbutler_feedback`(ADR 0019)。固定の案内文字列だけを返し、数 KB に収まる。入力は `kind` だけにするため、
+    `responseLimit: false` で外す(`max_response_tokens` 引数は付かない)。
 - 冪等キャッシュ(ADR 0005)との関係は上記のとおり、書き込みの応答には上限をかけないので影響しない。
 
 ## 帰結
